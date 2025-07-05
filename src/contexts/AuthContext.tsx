@@ -73,7 +73,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('Fetching profile for user:', userId);
       const { data, error } = await supabase
-        .from('profiles' as any)
+        .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
@@ -91,7 +91,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       console.log('Checking admin status for user:', userId);
       const { data, error } = await supabase
-        .from('admin_users' as any)
+        .from('admin_users')
         .select('*')
         .eq('user_id', userId)
         .eq('is_active', true)

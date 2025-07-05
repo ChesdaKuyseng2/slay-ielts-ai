@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -7,8 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { Profile, PracticeSession, ContentItem, SystemSetting } from '@/types/database';
@@ -55,7 +52,7 @@ const AdminDashboard = () => {
       
       // Fetch users
       const { data: usersData, error: usersError } = await supabase
-        .from('profiles' as any)
+        .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -63,7 +60,7 @@ const AdminDashboard = () => {
 
       // Fetch practice sessions
       const { data: sessionsData, error: sessionsError } = await supabase
-        .from('practice_sessions' as any)
+        .from('practice_sessions')
         .select('*, profiles(full_name, email)')
         .order('created_at', { ascending: false })
         .limit(10);
@@ -72,7 +69,7 @@ const AdminDashboard = () => {
 
       // Fetch content items
       const { data: contentData, error: contentError } = await supabase
-        .from('content_items' as any)
+        .from('content_items')
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -80,7 +77,7 @@ const AdminDashboard = () => {
 
       // Fetch system settings
       const { data: settingsData, error: settingsError } = await supabase
-        .from('system_settings' as any)
+        .from('system_settings')
         .select('*');
 
       console.log('Settings data:', { settingsData, settingsError });

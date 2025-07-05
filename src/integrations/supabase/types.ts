@@ -9,7 +9,159 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      admin_users: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          user_id: string | null
+          username: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          user_id?: string | null
+          username: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          user_id?: string | null
+          username?: string
+        }
+        Relationships: []
+      }
+      content_items: {
+        Row: {
+          content: Json
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          skill_type: string | null
+          title: string
+          type: string
+          updated_at: string | null
+        }
+        Insert: {
+          content: Json
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          skill_type?: string | null
+          title: string
+          type: string
+          updated_at?: string | null
+        }
+        Update: {
+          content?: Json
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          skill_type?: string | null
+          title?: string
+          type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      practice_sessions: {
+        Row: {
+          ai_feedback: string | null
+          completed_at: string | null
+          created_at: string | null
+          id: string
+          score: number | null
+          session_data: Json | null
+          skill_type: string
+          user_id: string | null
+        }
+        Insert: {
+          ai_feedback?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          score?: number | null
+          session_data?: Json | null
+          skill_type: string
+          user_id?: string | null
+        }
+        Update: {
+          ai_feedback?: string | null
+          completed_at?: string | null
+          created_at?: string | null
+          id?: string
+          score?: number | null
+          session_data?: Json | null
+          skill_type?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          email: string
+          full_name: string | null
+          id: string
+          subscription_expires_at: string | null
+          subscription_type: string | null
+          updated_at: string | null
+          username: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          full_name?: string | null
+          id: string
+          subscription_expires_at?: string | null
+          subscription_type?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          full_name?: string | null
+          id?: string
+          subscription_expires_at?: string | null
+          subscription_type?: string | null
+          updated_at?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
+      system_settings: {
+        Row: {
+          description: string | null
+          id: string
+          key: string
+          updated_at: string | null
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
