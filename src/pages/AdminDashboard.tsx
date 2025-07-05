@@ -51,29 +51,39 @@ const AdminDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
+      console.log('Fetching dashboard data...');
+      
       // Fetch users
-      const { data: usersData } = await supabase
-        .from('profiles')
+      const { data: usersData, error: usersError } = await supabase
+        .from('profiles' as any)
         .select('*')
         .order('created_at', { ascending: false });
 
+      console.log('Users data:', { usersData, usersError });
+
       // Fetch practice sessions
-      const { data: sessionsData } = await supabase
-        .from('practice_sessions')
+      const { data: sessionsData, error: sessionsError } = await supabase
+        .from('practice_sessions' as any)
         .select('*, profiles(full_name, email)')
         .order('created_at', { ascending: false })
         .limit(10);
 
+      console.log('Sessions data:', { sessionsData, sessionsError });
+
       // Fetch content items
-      const { data: contentData } = await supabase
-        .from('content_items')
+      const { data: contentData, error: contentError } = await supabase
+        .from('content_items' as any)
         .select('*')
         .order('created_at', { ascending: false });
 
+      console.log('Content data:', { contentData, contentError });
+
       // Fetch system settings
-      const { data: settingsData } = await supabase
-        .from('system_settings')
+      const { data: settingsData, error: settingsError } = await supabase
+        .from('system_settings' as any)
         .select('*');
+
+      console.log('Settings data:', { settingsData, settingsError });
 
       setUsers((usersData as Profile[]) || []);
       setSessions((sessionsData as PracticeSession[]) || []);
@@ -81,12 +91,12 @@ const AdminDashboard = () => {
       setSystemSettings((settingsData as SystemSetting[]) || []);
 
       // Calculate stats
-      const premiumCount = usersData?.filter(u => u.subscription_type === 'premium').length || 0;
+      const premiumCount = usersData?.filter((u: any) => u.subscription_type === 'premium').length || 0;
       setStats({
         totalUsers: usersData?.length || 0,
         premiumUsers: premiumCount,
         totalSessions: sessionsData?.length || 0,
-        activeSessions: sessionsData?.filter(s => !s.completed_at).length || 0
+        activeSessions: sessionsData?.filter((s: any) => !s.completed_at).length || 0
       });
 
     } catch (error) {
@@ -283,7 +293,6 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
-          {/* Analytics */}
           <TabsContent value="analytics">
             <Card>
               <CardHeader>
@@ -331,7 +340,6 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
-          {/* Sessions */}
           <TabsContent value="sessions">
             <Card>
               <CardHeader>
@@ -365,7 +373,6 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
-          {/* Settings */}
           <TabsContent value="settings">
             <Card>
               <CardHeader>

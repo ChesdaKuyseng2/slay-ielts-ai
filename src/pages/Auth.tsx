@@ -25,6 +25,7 @@ const Auth = () => {
 
   useEffect(() => {
     if (user && !loading) {
+      console.log('User authenticated, redirecting...', { user, isAdmin });
       if (isAdmin) {
         navigate('/admin');
       } else {
@@ -39,9 +40,12 @@ const Auth = () => {
     setIsLoading(true);
 
     try {
+      console.log('Submitting form:', { isSignUp, email: formData.email });
+      
       if (isSignUp) {
         const { error } = await signUp(formData.email, formData.password, formData.fullName);
         if (error) {
+          console.error('Sign up error:', error);
           setError(error.message);
         } else {
           setError('Please check your email to confirm your account.');
@@ -49,10 +53,12 @@ const Auth = () => {
       } else {
         const { error } = await signIn(formData.email, formData.password);
         if (error) {
+          console.error('Sign in error:', error);
           setError('Invalid email or password. Please try again.');
         }
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Auth error:', error);
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setIsLoading(false);
@@ -173,10 +179,11 @@ const Auth = () => {
         {/* Sample Users for Testing */}
         <Card className="mt-6">
           <CardHeader>
-            <CardTitle className="text-sm">Sample Login Credentials</CardTitle>
+            <CardTitle className="text-sm">Test Login Credentials</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 text-sm">
+              <p className="text-gray-600 mb-3">Use these test accounts (they should work after database setup):</p>
               {sampleUsers.map((user, index) => (
                 <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                   <div>
@@ -192,6 +199,9 @@ const Auth = () => {
                   </Button>
                 </div>
               ))}
+            </div>
+            <div className="mt-4 p-3 bg-blue-50 rounded text-sm text-blue-700">
+              <p><strong>Note:</strong> If login fails, the sample users may not be created yet. Check the database migration.</p>
             </div>
           </CardContent>
         </Card>
