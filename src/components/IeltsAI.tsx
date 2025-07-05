@@ -1,8 +1,8 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import PracticeSession from './PracticeSession';
 import { 
   Headphones, 
   BookOpen, 
@@ -21,6 +21,7 @@ interface IeltsAIProps {
 
 const IeltsAI: React.FC<IeltsAIProps> = ({ onViewChange }) => {
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
+  const [currentSession, setCurrentSession] = useState<string | null>(null);
 
   const skills = [
     {
@@ -87,19 +88,32 @@ const IeltsAI: React.FC<IeltsAIProps> = ({ onViewChange }) => {
 
   const handleSkillSelect = (skillId: string) => {
     setSelectedSkill(skillId);
-    // In a real app, this would navigate to the specific skill component
     console.log(`Selected skill: ${skillId}`);
   };
 
   const handleStartNew = (skillId: string) => {
-    // Generate new practice session
     console.log(`Starting new ${skillId} session`);
+    setCurrentSession(skillId);
   };
 
   const handleResumePrevious = (skillId: string) => {
-    // Resume previous session
     console.log(`Resuming previous ${skillId} session`);
+    setCurrentSession(skillId);
   };
+
+  const handleBackToSkills = () => {
+    setCurrentSession(null);
+    setSelectedSkill(null);
+  };
+
+  if (currentSession) {
+    return (
+      <PracticeSession 
+        skillType={currentSession} 
+        onBack={handleBackToSkills}
+      />
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto p-6">

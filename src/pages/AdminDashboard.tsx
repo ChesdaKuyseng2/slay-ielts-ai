@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -33,7 +34,7 @@ const AdminDashboard = () => {
     activeSessions: 0
   });
   const [users, setUsers] = useState<Profile[]>([]);
-  const [sessions, setSessions] = useState<PracticeSession[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [systemSettings, setSystemSettings] = useState<SystemSetting[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,10 +59,13 @@ const AdminDashboard = () => {
 
       console.log('Users data:', { usersData, usersError });
 
-      // Fetch practice sessions
+      // Fetch practice sessions with proper join
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('practice_sessions')
-        .select('*, profiles(full_name, email)')
+        .select(`
+          *,
+          profiles!inner(full_name, email)
+        `)
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -83,7 +87,7 @@ const AdminDashboard = () => {
       console.log('Settings data:', { settingsData, settingsError });
 
       setUsers((usersData as Profile[]) || []);
-      setSessions((sessionsData as PracticeSession[]) || []);
+      setSessions(sessionsData || []);
       setContentItems((contentData as ContentItem[]) || []);
       setSystemSettings((settingsData as SystemSetting[]) || []);
 

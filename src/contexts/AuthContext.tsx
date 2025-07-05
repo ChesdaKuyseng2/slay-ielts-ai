@@ -95,10 +95,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .select('*')
         .eq('user_id', userId)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
       
       console.log('Admin check result:', { data, error });
-      setIsAdmin(!error && data);
+      setIsAdmin(!!data && !error);
     } catch (error) {
       console.error('Error checking admin status:', error);
       setIsAdmin(false);

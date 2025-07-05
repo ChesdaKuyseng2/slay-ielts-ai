@@ -7,6 +7,7 @@ import Dashboard from '@/components/Dashboard';
 import IeltsAI from '@/components/IeltsAI';
 import Analytics from '@/components/Analytics';
 import History from '@/components/History';
+import Settings from '@/components/Settings';
 
 const Index = () => {
   const { user, loading } = useAuth();
@@ -19,7 +20,6 @@ const Index = () => {
     }
   }, [user, loading, navigate]);
 
-  // Mock user data - will be replaced with real data from auth context
   const userData = {
     name: user?.user_metadata?.full_name || 'User',
     email: user?.email || '',
@@ -36,6 +36,8 @@ const Index = () => {
         return <Analytics />;
       case 'history':
         return <History />;
+      case 'settings':
+        return <Settings />;
       case 'profile':
         return (
           <div className="max-w-4xl mx-auto p-6">
@@ -79,7 +81,7 @@ const Index = () => {
   }
 
   if (!user) {
-    return null; // Will redirect to auth in useEffect
+    return null;
   }
 
   return (

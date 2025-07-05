@@ -4,11 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Eye, EyeOff } from 'lucide-react';
+import { cleanupAuthState } from '@/utils/authCleanup';
+import { supabase } from '@/integrations/supabase/client';
 
 const Auth = () => {
   const { signIn, signUp, user, isAdmin, loading } = useAuth();
@@ -40,6 +41,16 @@ const Auth = () => {
     setIsLoading(true);
 
     try {
+      // Clean up existing state before auth operations
+      cleanupAuthState();
+      
+      // Attempt global sign out first
+      try {
+        await supabase.auth.signOut({ scope: 'global' });
+      } catch (err) {
+        // Continue even if this fails
+      }
+
       console.log('Submitting form:', { isSignUp, email: formData.email });
       
       if (isSignUp) {
@@ -55,6 +66,9 @@ const Auth = () => {
         if (error) {
           console.error('Sign in error:', error);
           setError('Invalid email or password. Please try again.');
+        } else {
+          // Force page reload for clean state
+          window.location.href = '/dashboard';
         }
       }
     } catch (error: any) {
@@ -66,10 +80,8 @@ const Auth = () => {
   };
 
   const sampleUsers = [
-    { email: 'dary@gmail.com', password: '123456', type: 'Premium User' },
-    { email: 'sreymom@gmail.com', password: '123456', type: 'Premium User' },
-    { email: 'chesda@gmail.com', password: '123456', type: 'Normal User' },
-    { email: 'admin@gmail.com', password: '123456', type: 'Admin User' }
+    { email: 'chesdakuyseng2@gmail.com', password: '123456', type: 'Normal User' },
+    { email: 'chesdakuyseng1@gmail.com', password: '123456', type: 'Admin User' }
   ];
 
   if (loading) {
@@ -183,7 +195,7 @@ const Auth = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-2 text-sm">
-              <p className="text-gray-600 mb-3">Use these test accounts (they should work after database setup):</p>
+              <p className="text-gray-600 mb-3">Test accounts (sign up first to create them):</p>
               {sampleUsers.map((user, index) => (
                 <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                   <div>
@@ -201,7 +213,7 @@ const Auth = () => {
               ))}
             </div>
             <div className="mt-4 p-3 bg-blue-50 rounded text-sm text-blue-700">
-              <p><strong>Note:</strong> If login fails, the sample users may not be created yet. Check the database migration.</p>
+              <p><strong>Note:</strong> Sign up with these credentials first, then you can sign in.</p>
             </div>
           </CardContent>
         </Card>
