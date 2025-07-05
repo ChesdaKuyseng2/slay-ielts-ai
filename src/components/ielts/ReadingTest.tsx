@@ -23,6 +23,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
   const { toast } = useToast();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [timeLeft, setTimeLeft] = useState(60 * 60); // 60 minutes
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   React.useEffect(() => {
     const timer = setInterval(() => {
@@ -34,7 +35,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
             description: "Your test has been automatically submitted.",
             variant: "destructive"
           });
-          onComplete(answers);
+          handleSubmit();
           return 0;
         }
         return prev - 1;
@@ -55,9 +56,50 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
     return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleSubmit = () => {
-    onComplete(answers);
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
+    try {
+      // Ensure we have valid answers
+      const validAnswers = Object.keys(answers).length > 0 ? answers : { default: 'No answers provided' };
+      await onComplete(validAnswers);
+    } catch (error) {
+      console.error('Error submitting reading test:', error);
+      toast({
+        title: "Submission Error",
+        description: "There was an error submitting your test. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  // Use AI-generated content if available, otherwise fallback
+  const passage = testData?.passage || `
+    <h3>The Impact of Technology on Modern Education</h3>
+    <p><strong>A</strong> The integration of technology in educational settings has revolutionized the way students learn and teachers instruct. From interactive whiteboards to online learning platforms, technology has become an indispensable tool in modern education. This transformation has not only changed the physical classroom environment but has also redefined the roles of both educators and learners.</p>
+    
+    <p><strong>B</strong> Research indicates that students who use technology-enhanced learning methods show improved engagement and retention rates compared to traditional teaching methods. Interactive software, virtual reality experiences, and gamified learning platforms have made complex subjects more accessible and enjoyable for students across all age groups. However, the effectiveness largely depends on how well the technology is integrated into the curriculum and the teacher's ability to adapt their teaching methods accordingly.</p>
+    
+    <p><strong>C</strong> Despite the numerous benefits, some educators argue that excessive reliance on technology may diminish critical thinking skills and face-to-face interaction among students. The concern is that students might become too dependent on digital tools for problem-solving, potentially affecting their ability to think independently. Additionally, the digital divide continues to be a significant challenge, as not all students have equal access to technological resources.</p>
+    
+    <p><strong>D</strong> Looking toward the future, the challenge lies in finding the right balance between technological advancement and traditional pedagogical approaches. Educational institutions must carefully consider how to implement technology in ways that enhance rather than replace fundamental teaching practices. The goal should be to use technology as a tool to support and amplify human learning, not to substitute the essential human elements of education.</p>
+  `;
+
+  const questions = testData?.questions || [
+    'Technology has completely replaced traditional teaching methods in all schools.',
+    'Students show better engagement with technology-enhanced learning according to research.',
+    'All educators support the unlimited use of technology in classrooms.',
+    'The digital divide affects equal access to technological resources for students.',
+    'Finding the right balance between technology and traditional methods is a current challenge.',
+    'Interactive software has made learning more enjoyable for students.',
+    'Virtual reality is mentioned as being used only in higher education.',
+    'The effectiveness of technology depends on proper curriculum integration.',
+    'Face-to-face interaction has completely disappeared from modern classrooms.',
+    'Educational institutions must consider careful implementation of technology.'
+  ];
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -87,16 +129,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
           </CardHeader>
           <CardContent>
             <div className="prose max-w-none text-sm leading-relaxed bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
-              <div dangerouslySetInnerHTML={{ __html: testData.passage || `
-                <h3>Climate Change and Its Effects</h3>
-                <p><strong>A</strong> Climate change refers to long-term shifts in global temperatures and weather patterns. While climate variations are natural, human activities have been the main driver of climate change since the 1800s, primarily through the burning of fossil fuels like coal, oil, and gas.</p>
-                
-                <p><strong>B</strong> The greenhouse effect is a natural process that warms the Earth's surface. When the Sun's energy reaches the Earth's atmosphere, some of it is reflected back to space and the rest is absorbed and re-radiated by greenhouse gases. However, human activities have increased the concentration of these gases.</p>
-                
-                <p><strong>C</strong> The consequences of climate change are already visible worldwide. Rising global temperatures have led to melting ice caps, rising sea levels, and more frequent extreme weather events such as hurricanes, droughts, and floods. These changes pose significant threats to ecosystems, agriculture, and human settlements.</p>
-                
-                <p><strong>D</strong> Scientists agree that immediate action is necessary to mitigate the effects of climate change. This includes transitioning to renewable energy sources, improving energy efficiency, and implementing policies to reduce greenhouse gas emissions. International cooperation is essential for addressing this global challenge.</p>
-              ` }} />
+              <div dangerouslySetInnerHTML={{ __html: passage }} />
             </div>
           </CardContent>
         </Card>
@@ -112,20 +145,14 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
           <CardContent className="space-y-6">
             {/* True/False/Not Given Questions */}
             <div className="space-y-4">
-              <h3 className="font-semibold text-blue-600">Questions 1-5: True/False/Not Given</h3>
+              <h3 className="font-semibold text-blue-600">Questions 1-8: True/False/Not Given</h3>
               <p className="text-sm text-gray-600 mb-4">
                 Write TRUE if the statement agrees with the information<br/>
                 Write FALSE if the statement contradicts the information<br/>
                 Write NOT GIVEN if there is no information on this
               </p>
               
-              {[
-                "Climate change is only caused by natural factors.",
-                "Fossil fuels are the main cause of climate change since the 1800s.",
-                "The greenhouse effect is entirely artificial.",
-                "Climate change effects are already observable worldwide.",
-                "All countries have agreed on climate change policies."
-              ].map((statement, index) => (
+              {questions.slice(0, 8).map((statement, index) => (
                 <div key={index} className="border-l-2 border-gray-200 pl-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -157,55 +184,6 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
               ))}
             </div>
 
-            {/* Multiple Choice Questions */}
-            <div className="space-y-4 pt-6 border-t">
-              <h3 className="font-semibold text-blue-600">Questions 6-8: Multiple Choice</h3>
-              
-              {[
-                {
-                  question: "According to the passage, the main driver of climate change since the 1800s has been:",
-                  options: ["Natural climate variations", "Human activities", "Solar radiation", "Ocean currents"]
-                },
-                {
-                  question: "The greenhouse effect is described as:",
-                  options: ["A harmful process", "A natural process", "An artificial process", "An unknown process"]
-                },
-                {
-                  question: "The passage suggests that addressing climate change requires:",
-                  options: ["Individual action only", "Government policies only", "International cooperation", "Technological solutions only"]
-                }
-              ].map((q, index) => (
-                <div key={index} className="border-l-2 border-gray-200 pl-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="font-medium mb-2">{index + 6}. {q.question}</p>
-                      <div className="space-y-1">
-                        {q.options.map((option, optIndex) => (
-                          <label key={optIndex} className="flex items-center space-x-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`mc_${index + 5}`}
-                              value={option}
-                              onChange={(e) => handleAnswerChange(`mc_${index + 5}`, e.target.value)}
-                              className="text-blue-600"
-                            />
-                            <span className="text-sm">{String.fromCharCode(65 + optIndex)}. {option}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onExplainAnswer(index + 5)}
-                    >
-                      <HelpCircle className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
             {/* Summary Completion */}
             <div className="space-y-4 pt-6 border-t">
               <h3 className="font-semibold text-blue-600">Questions 9-10: Summary Completion</h3>
@@ -213,16 +191,18 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
               
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="text-sm leading-relaxed">
-                  Climate change has been primarily driven by <Input 
+                  The integration of technology in education has <Input 
                     className="inline-block w-32 mx-1 h-6 text-xs"
                     value={answers['summary_1'] || ''}
                     onChange={(e) => handleAnswerChange('summary_1', e.target.value)}
-                  /> since the 1800s. The effects include rising sea levels and more frequent 
+                    placeholder="word 1"
+                  /> the way students learn. However, some educators worry about excessive 
                   <Input 
                     className="inline-block w-32 mx-1 h-6 text-xs"
                     value={answers['summary_2'] || ''}
                     onChange={(e) => handleAnswerChange('summary_2', e.target.value)}
-                  /> weather events.
+                    placeholder="word 2"
+                  /> on digital tools.
                 </p>
               </div>
             </div>
@@ -231,8 +211,13 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
               <div className="text-sm text-gray-600">
                 Progress: {Object.keys(answers).length} / 10 answered
               </div>
-              <Button onClick={handleSubmit} size="lg" className="bg-green-600 hover:bg-green-700">
-                Submit Answers
+              <Button 
+                onClick={handleSubmit} 
+                size="lg" 
+                className="bg-green-600 hover:bg-green-700"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit Answers'}
               </Button>
             </div>
           </CardContent>
