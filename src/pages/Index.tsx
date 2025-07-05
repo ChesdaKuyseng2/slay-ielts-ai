@@ -20,12 +20,6 @@ const Index = () => {
     }
   }, [user, loading, navigate]);
 
-  const userData = {
-    name: user?.user_metadata?.full_name || 'User',
-    email: user?.email || '',
-    avatar: user?.user_metadata?.full_name?.split(' ').map((n: string) => n[0]).join('') || 'U'
-  };
-
   const renderContent = () => {
     switch (currentView) {
       case 'dashboard':
@@ -35,35 +29,9 @@ const Index = () => {
       case 'analytics':
         return <Analytics />;
       case 'history':
-        return <History />;
+        return <History onViewChange={setCurrentView} />;
       case 'settings':
         return <Settings />;
-      case 'profile':
-        return (
-          <div className="max-w-4xl mx-auto p-6">
-            <div className="bg-white rounded-xl shadow-lg p-8">
-              <h1 className="text-2xl font-bold mb-4">User Profile</h1>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Name</label>
-                  <div className="mt-1 text-lg">{userData.name}</div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Email</label>
-                  <div className="mt-1 text-lg">{userData.email}</div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Current IELTS Score</label>
-                  <div className="mt-1 text-lg font-semibold text-sky-600">7.5</div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Target Score</label>
-                  <div className="mt-1 text-lg font-semibold text-green-600">8.0</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
       default:
         return <Dashboard onViewChange={setCurrentView} />;
     }
@@ -89,7 +57,6 @@ const Index = () => {
       <Header 
         currentView={currentView} 
         onViewChange={setCurrentView}
-        user={userData}
       />
       <main className="pb-8">
         {renderContent()}

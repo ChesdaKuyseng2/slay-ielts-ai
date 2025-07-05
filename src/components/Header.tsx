@@ -48,7 +48,6 @@ const Header: React.FC<HeaderProps> = ({ onViewChange, currentView }) => {
           <nav className="hidden md:flex space-x-6">
             {[
               { key: 'dashboard', label: 'Dashboard' },
-              { key: 'practice', label: 'Practice' },
               { key: 'ielts-ai', label: 'IELTS AI' },
               { key: 'history', label: 'History' },
               { key: 'analytics', label: 'Analytics' },

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -251,44 +250,49 @@ const ProfessionalPracticeSession: React.FC<ProfessionalPracticeSessionProps> = 
     setIsLoading(true);
     try {
       // Create detailed feedback prompt for proper band scoring
-      const feedbackPrompt = `As an IELTS examiner, evaluate this ${skillType} response and provide professional feedback:
+      const feedbackPrompt = `As a certified IELTS examiner, provide professional feedback for this ${skillType} response. Use clean, structured format without asterisks or markdown symbols:
 
-      Response: ${JSON.stringify(userResponse)}
+      User Response: ${JSON.stringify(userResponse)}
       
-      Please provide a structured evaluation:
-      
-      OVERALL BAND SCORE: [X.X/9.0]
+      Provide feedback in this exact format:
+
+      OVERALL BAND SCORE: [X.X out of 9.0]
       
       DETAILED ASSESSMENT:
       
-      For ${skillType.toUpperCase()}:
       ${skillType === 'writing' ? `
-      Task Achievement/Response: [Score/9] - Comment on how well the task is addressed
-      Coherence and Cohesion: [Score/9] - Comment on organization and flow
-      Lexical Resource: [Score/9] - Comment on vocabulary range and accuracy
-      Grammatical Range and Accuracy: [Score/9] - Comment on grammar usage
+      Task Achievement: [X.X/9.0] - How well the task requirements are addressed
+      Coherence and Cohesion: [X.X/9.0] - Organization and logical flow of ideas
+      Lexical Resource: [X.X/9.0] - Vocabulary range, accuracy and appropriateness
+      Grammatical Range and Accuracy: [X.X/9.0] - Grammar complexity and correctness
       ` : skillType === 'speaking' ? `
-      Fluency and Coherence: [Score/9] - Comment on flow and organization of ideas
-      Lexical Resource: [Score/9] - Comment on vocabulary range and appropriateness
-      Grammatical Range and Accuracy: [Score/9] - Comment on grammar complexity and accuracy
-      Pronunciation: [Score/9] - Comment on clarity and natural speech patterns
+      Fluency and Coherence: [X.X/9.0] - Natural flow and logical organization
+      Lexical Resource: [X.X/9.0] - Vocabulary range and appropriateness
+      Grammatical Range and Accuracy: [X.X/9.0] - Grammar complexity and accuracy
+      Pronunciation: [X.X/9.0] - Clarity and natural speech patterns
+      ` : skillType === 'reading' ? `
+      Reading Comprehension: [X.X/9.0] - Understanding of text and questions
+      Task Response: [X.X/9.0] - Accuracy in answering different question types
+      Time Management: [X.X/9.0] - Efficiency in completing tasks
       ` : `
-      Performance Analysis: [Score/9] - Comment on accuracy and understanding
+      Listening Skills: [X.X/9.0] - Understanding of audio content
+      Task Response: [X.X/9.0] - Accuracy in answering questions
+      Note-taking: [X.X/9.0] - Ability to capture key information
       `}
       
       STRENGTHS:
-      - List specific positive aspects
+      - List 3-4 specific positive aspects of the performance
       
       AREAS FOR IMPROVEMENT:
-      - List specific areas needing development
+      - List 3-4 specific areas that need development
       
       RECOMMENDATIONS:
-      - Provide actionable suggestions for improvement
+      - Provide 3-4 actionable study suggestions
       
-      SAMPLE IMPROVEMENT:
-      - Show how a specific part could be improved
+      EXAMINER COMMENTS:
+      Professional summary of performance with specific examples from the response.
       
-      Format your response in clean, professional language without asterisks or markdown formatting.`;
+      Use professional language suitable for official IELTS feedback. Do not use asterisks, markdown formatting, or casual language.`;
       
       const { data: feedbackData, error: feedbackError } = await supabase.functions.invoke('gemini-chat', {
         body: { message: feedbackPrompt }
@@ -439,19 +443,96 @@ const ProfessionalPracticeSession: React.FC<ProfessionalPracticeSessionProps> = 
           </Badge>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-green-600">Professional IELTS Feedback</CardTitle>
+        <Card className="shadow-lg">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
+            <CardTitle className="text-2xl text-center text-blue-700">
+              Official IELTS Band Score Report
+            </CardTitle>
+            <p className="text-center text-gray-600 mt-2">
+              {skillType.charAt(0).toUpperCase() + skillType.slice(1)} Test Assessment
+            </p>
           </CardHeader>
-          <CardContent>
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-8 rounded-lg border border-blue-200">
-              <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">
-                {aiResponse.replace(/\*\*/g, '').replace(/\*/g, '')}
+          <CardContent className="p-8">
+            <div className="bg-white border border-gray-200 rounded-lg p-6">
+              <div className="prose max-w-none">
+                {aiResponse.split('\n').map((line, index) => {
+                  const trimmedLine = line.trim();
+                  
+                  // Handle main headers
+                  if (trimmedLine.startsWith('OVERALL BAND SCORE:')) {
+                    return (
+                      <div key={index} className="text-center mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <h2 className="text-3xl font-bold text-blue-700 mb-2">
+                          {trimmedLine.split(':')[1]?.trim() || 'N/A'}
+                        </h2>
+                        <p className="text-gray-600">Overall Band Score</p>
+                      </div>
+                    );
+                  }
+                  
+                  // Handle section headers
+                  if (trimmedLine.match(/^(DETAILED ASSESSMENT|STRENGTHS|AREAS FOR IMPROVEMENT|RECOMMENDATIONS|EXAMINER COMMENTS):?$/)) {
+                    return (
+                      <div key={index} className="mt-6 mb-3">
+                        <h3 className="text-lg font-semibold text-gray-800 border-b border-gray-300 pb-2">
+                          {trimmedLine.replace(':', '')}
+                        </h3>
+                      </div>
+                    );
+                  }
+                  
+                  // Handle skill scores
+                  if (trimmedLine.includes('/9.0') && trimmedLine.includes(':')) {
+                    const [skill, rest] = trimmedLine.split(':');
+                    const scoreMatch = rest.match(/\[(\d+\.?\d*)/);
+                    const score = scoreMatch ? scoreMatch[1] : 'N/A';
+                    const description = rest.replace(/\[[\d.\/]+\]/, '').replace(' - ', '');
+                    
+                    return (
+                      <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg mb-2">
+                        <div>
+                          <span className="font-medium text-gray-800">{skill.trim()}</span>
+                          <p className="text-sm text-gray-600">{description.trim()}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-lg font-bold px-3 py-1 rounded-full ${
+                            parseFloat(score) >= 7 ? 'bg-green-100 text-green-700' :
+                            parseFloat(score) >= 6 ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {score}/9.0
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Handle bullet points
+                  if (trimmedLine.startsWith('-')) {
+                    return (
+                      <div key={index} className="flex items-start mb-2">
+                        <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 mr-3 flex-shrink-0"></div>
+                        <p className="text-gray-700">{trimmedLine.substring(1).trim()}</p>
+                      </div>
+                    );
+                  }
+                  
+                  // Handle regular paragraphs
+                  if (trimmedLine && !trimmedLine.match(/^(DETAILED ASSESSMENT|STRENGTHS|AREAS FOR IMPROVEMENT|RECOMMENDATIONS|EXAMINER COMMENTS):?$/)) {
+                    return (
+                      <p key={index} className="text-gray-700 mb-3 leading-relaxed">
+                        {trimmedLine}
+                      </p>
+                    );
+                  }
+                  
+                  return null;
+                })}
               </div>
             </div>
             
-            <div className="flex space-x-4 mt-6">
-              <Button onClick={() => generateOrLoadContent()}>
+            <div className="flex justify-center space-x-4 mt-8">
+              <Button onClick={() => generateOrLoadContent()} className="bg-blue-600 hover:bg-blue-700">
                 Take Another Test
               </Button>
               <Button variant="outline" onClick={onBack}>
