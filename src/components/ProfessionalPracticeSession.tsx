@@ -106,7 +106,6 @@ const ProfessionalPracticeSession: React.FC<ProfessionalPracticeSessionProps> = 
         .single();
 
       if (contentError || !contentData) {
-        // If no pre-generated content, use fallback
         setSessionData(getFallbackContent(skillType));
       } else {
         setSessionData(contentData.content);
@@ -170,7 +169,6 @@ const ProfessionalPracticeSession: React.FC<ProfessionalPracticeSessionProps> = 
         created_at: new Date().toISOString()
       };
     } catch (error) {
-      // If not valid JSON, create structured data from text
       return {
         type: skill,
         generated_by: 'ai',
@@ -197,8 +195,7 @@ const ProfessionalPracticeSession: React.FC<ProfessionalPracticeSessionProps> = 
           {
             type: 'fill_blank',
             question: 'The advisor suggests taking ________ as an elective course.'
-          },
-          // Add more questions...
+          }
         ]
       },
       reading: {
@@ -234,7 +231,6 @@ const ProfessionalPracticeSession: React.FC<ProfessionalPracticeSessionProps> = 
   };
 
   const generateFallbackQuestions = (skill: string) => {
-    // Generate appropriate questions based on skill type
     switch (skill) {
       case 'reading':
         return [
@@ -254,15 +250,45 @@ const ProfessionalPracticeSession: React.FC<ProfessionalPracticeSessionProps> = 
 
     setIsLoading(true);
     try {
-      // Get AI feedback
-      const feedbackPrompt = `Evaluate this IELTS ${skillType} response and provide detailed feedback with a band score (0-9). 
+      // Create detailed feedback prompt for proper band scoring
+      const feedbackPrompt = `As an IELTS examiner, evaluate this ${skillType} response and provide professional feedback:
+
       Response: ${JSON.stringify(userResponse)}
       
-      Please provide:
-      1. Overall band score
-      2. Detailed feedback for each criterion
-      3. Specific suggestions for improvement
-      4. Positive aspects of the response`;
+      Please provide a structured evaluation:
+      
+      OVERALL BAND SCORE: [X.X/9.0]
+      
+      DETAILED ASSESSMENT:
+      
+      For ${skillType.toUpperCase()}:
+      ${skillType === 'writing' ? `
+      Task Achievement/Response: [Score/9] - Comment on how well the task is addressed
+      Coherence and Cohesion: [Score/9] - Comment on organization and flow
+      Lexical Resource: [Score/9] - Comment on vocabulary range and accuracy
+      Grammatical Range and Accuracy: [Score/9] - Comment on grammar usage
+      ` : skillType === 'speaking' ? `
+      Fluency and Coherence: [Score/9] - Comment on flow and organization of ideas
+      Lexical Resource: [Score/9] - Comment on vocabulary range and appropriateness
+      Grammatical Range and Accuracy: [Score/9] - Comment on grammar complexity and accuracy
+      Pronunciation: [Score/9] - Comment on clarity and natural speech patterns
+      ` : `
+      Performance Analysis: [Score/9] - Comment on accuracy and understanding
+      `}
+      
+      STRENGTHS:
+      - List specific positive aspects
+      
+      AREAS FOR IMPROVEMENT:
+      - List specific areas needing development
+      
+      RECOMMENDATIONS:
+      - Provide actionable suggestions for improvement
+      
+      SAMPLE IMPROVEMENT:
+      - Show how a specific part could be improved
+      
+      Format your response in clean, professional language without asterisks or markdown formatting.`;
       
       const { data: feedbackData, error: feedbackError } = await supabase.functions.invoke('gemini-chat', {
         body: { message: feedbackPrompt }
@@ -315,9 +341,17 @@ const ProfessionalPracticeSession: React.FC<ProfessionalPracticeSessionProps> = 
     setIsLoading(true);
     try {
       const question = sessionData.questions?.[questionIndex];
-      const explainPrompt = `Explain why this IELTS ${skillType} question has its correct answer:
+      const explainPrompt = `As an IELTS expert, explain the answer to this ${skillType} question:
+      
       Question: ${question?.question || `Question ${questionIndex + 1}`}
-      Provide a clear, educational explanation about the correct answer and why other options are incorrect.`;
+      
+      Please provide:
+      1. The correct answer and why it is correct
+      2. Why other options are incorrect (if applicable)
+      3. Key strategies for similar questions
+      4. Common mistakes to avoid
+      
+      Use clear, educational language without asterisks or markdown formatting.`;
 
       const { data: explanationData, error: explanationError } = await supabase.functions.invoke('gemini-chat', {
         body: { message: explainPrompt }
@@ -341,11 +375,11 @@ const ProfessionalPracticeSession: React.FC<ProfessionalPracticeSessionProps> = 
   };
 
   const extractScore = (feedback: string): number => {
-    const scoreMatch = feedback.match(/(\d+(?:\.\d+)?)\s*\/\s*9|band\s*(\d+(?:\.\d+)?)|score:\s*(\d+(?:\.\d+)?)/i);
+    const scoreMatch = feedback.match(/(\d+(?:\.\d+)?)\s*\/\s*9(?:\.0)?|OVERALL BAND SCORE:\s*(\d+(?:\.\d+)?)|band\s*score:\s*(\d+(?:\.\d+)?)/i);
     if (scoreMatch) {
       return parseFloat(scoreMatch[1] || scoreMatch[2] || scoreMatch[3]);
     }
-    return Math.floor(Math.random() * 3) + 6; // Random score between 6-8 if not found
+    return Math.floor(Math.random() * 3) + 6;
   };
 
   const renderTestComponent = () => {
@@ -407,12 +441,12 @@ const ProfessionalPracticeSession: React.FC<ProfessionalPracticeSessionProps> = 
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-green-600">Test Results & Feedback</CardTitle>
+            <CardTitle className="text-green-600">Professional IELTS Feedback</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="prose max-w-none">
-              <div className="bg-green-50 p-6 rounded-lg whitespace-pre-wrap">
-                {aiResponse}
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-8 rounded-lg border border-blue-200">
+              <div className="whitespace-pre-wrap text-gray-800 leading-relaxed">
+                {aiResponse.replace(/\*\*/g, '').replace(/\*/g, '')}
               </div>
             </div>
             
@@ -474,9 +508,9 @@ const ProfessionalPracticeSession: React.FC<ProfessionalPracticeSessionProps> = 
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="prose max-w-none">
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  {explanation}
+              <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
+                <div className="text-gray-800 whitespace-pre-wrap">
+                  {explanation.replace(/\*\*/g, '').replace(/\*/g, '')}
                 </div>
               </div>
             </CardContent>

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Mic, MicOff, Play, Pause, Square, Clock, User } from 'lucide-react';
+import { Mic, MicOff, Square, Clock, User, Play } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface SpeakingTestProps {
@@ -25,16 +25,30 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
   const [preparationTime, setPreparationTime] = useState(0);
   const [speakingTime, setSpeakingTime] = useState(0);
   const [isPreparation, setIsPreparation] = useState(false);
+  const [canStartRecording, setCanStartRecording] = useState(true);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const preparationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const speakingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    return () => {
+      if (preparationTimerRef.current) {
+        clearInterval(preparationTimerRef.current);
+      }
+      if (speakingTimerRef.current) {
+        clearInterval(speakingTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (isPreparation && preparationTime > 0) {
-      timer = setInterval(() => {
+      preparationTimerRef.current = setInterval(() => {
         setPreparationTime(prev => {
           if (prev <= 1) {
             setIsPreparation(false);
+            setCanStartRecording(true);
             toast({
               title: "Preparation Time Over",
               description: "You can now start recording your response.",
@@ -44,15 +58,40 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
           return prev - 1;
         });
       }, 1000);
-    } else if (isRecording) {
-      timer = setInterval(() => {
+    } else {
+      if (preparationTimerRef.current) {
+        clearInterval(preparationTimerRef.current);
+      }
+    }
+
+    return () => {
+      if (preparationTimerRef.current) {
+        clearInterval(preparationTimerRef.current);
+      }
+    };
+  }, [isPreparation, preparationTime]);
+
+  useEffect(() => {
+    if (isRecording) {
+      speakingTimerRef.current = setInterval(() => {
         setSpeakingTime(prev => prev + 1);
       }, 1000);
+    } else {
+      if (speakingTimerRef.current) {
+        clearInterval(speakingTimerRef.current);
+      }
     }
-    return () => clearInterval(timer);
-  }, [isPreparation, preparationTime, isRecording]);
+
+    return () => {
+      if (speakingTimerRef.current) {
+        clearInterval(speakingTimerRef.current);
+      }
+    };
+  }, [isRecording]);
 
   const startRecording = async () => {
+    if (!canStartRecording) return;
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
@@ -93,8 +132,8 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
       setIsRecording(false);
       setSpeakingTime(0);
       toast({
-        title: "Recording Stopped",
-        description: "Your response has been saved.",
+        title: "Recording Completed",
+        description: "Your response has been saved successfully.",
       });
     }
   };
@@ -102,6 +141,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
   const startPreparation = (seconds: number) => {
     setPreparationTime(seconds);
     setIsPreparation(true);
+    setCanStartRecording(false);
     toast({
       title: "Preparation Time Started",
       description: `You have ${seconds} seconds to prepare your answer.`,
@@ -115,8 +155,19 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
   };
 
   const handleSubmit = () => {
+    if (Object.keys(recordings).length < 3) {
+      toast({
+        title: "Incomplete Test",
+        description: "Please complete all three parts before submitting.",
+        variant: "destructive"
+      });
+      return;
+    }
     onComplete(recordings);
   };
+
+  const isPartCompleted = (part: string) => recordings[part] !== undefined;
+  const allPartsCompleted = Object.keys(recordings).length >= 3;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -153,15 +204,15 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="part1" className="flex items-center space-x-2">
             <span>Part 1: Introduction</span>
-            {recordings.part1 && <Badge variant="secondary" className="ml-2">✓</Badge>}
+            {isPartCompleted('part1') && <Badge variant="secondary" className="ml-2">✓</Badge>}
           </TabsTrigger>
           <TabsTrigger value="part2" className="flex items-center space-x-2">
             <span>Part 2: Cue Card</span>
-            {recordings.part2 && <Badge variant="secondary" className="ml-2">✓</Badge>}
+            {isPartCompleted('part2') && <Badge variant="secondary" className="ml-2">✓</Badge>}
           </TabsTrigger>
           <TabsTrigger value="part3" className="flex items-center space-x-2">
             <span>Part 3: Discussion</span>
-            {recordings.part3 && <Badge variant="secondary" className="ml-2">✓</Badge>}
+            {isPartCompleted('part3') && <Badge variant="secondary" className="ml-2">✓</Badge>}
           </TabsTrigger>
         </TabsList>
 
@@ -170,7 +221,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
             <CardHeader>
               <CardTitle className="text-red-600">Part 1: Introduction and Interview</CardTitle>
               <p className="text-sm text-gray-600">
-                Duration: 4-5 minutes. The examiner will ask you general questions about yourself.
+                Duration: 4-5 minutes. Answer general questions about yourself and familiar topics.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -186,7 +237,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
               </div>
               
               <div className="flex justify-center space-x-4">
-                {!isRecording ? (
+                {!isRecording && !isPartCompleted('part1') ? (
                   <Button 
                     onClick={startRecording}
                     className="bg-red-600 hover:bg-red-700"
@@ -195,7 +246,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
                     <Mic className="h-5 w-5 mr-2" />
                     Start Recording
                   </Button>
-                ) : (
+                ) : isRecording ? (
                   <Button 
                     onClick={stopRecording}
                     variant="outline"
@@ -204,6 +255,10 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
                     <Square className="h-5 w-5 mr-2" />
                     Stop Recording
                   </Button>
+                ) : (
+                  <Badge variant="secondary" className="text-green-700 p-3">
+                    ✓ Part 1 Completed
+                  </Badge>
                 )}
               </div>
             </CardContent>
@@ -215,7 +270,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
             <CardHeader>
               <CardTitle className="text-red-600">Part 2: Individual Long Turn</CardTitle>
               <p className="text-sm text-gray-600">
-                Duration: 3-4 minutes. You will have 1 minute to prepare, then speak for 1-2 minutes.
+                Duration: 3-4 minutes. You have 1 minute to prepare, then speak for 1-2 minutes.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -236,7 +291,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
               </div>
               
               <div className="flex justify-center space-x-4">
-                {!isPreparation && !isRecording ? (
+                {!isPreparation && !isRecording && !isPartCompleted('part2') ? (
                   <Button 
                     onClick={() => startPreparation(60)}
                     className="bg-orange-600 hover:bg-orange-700"
@@ -250,7 +305,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
                     <Clock className="h-5 w-5 mr-2" />
                     Preparing... {formatTime(preparationTime)}
                   </Button>
-                ) : !isRecording ? (
+                ) : !isRecording && canStartRecording && !isPartCompleted('part2') ? (
                   <Button 
                     onClick={startRecording}
                     className="bg-red-600 hover:bg-red-700"
@@ -259,7 +314,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
                     <Mic className="h-5 w-5 mr-2" />
                     Start Recording
                   </Button>
-                ) : (
+                ) : isRecording ? (
                   <Button 
                     onClick={stopRecording}
                     variant="outline"
@@ -268,7 +323,11 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
                     <Square className="h-5 w-5 mr-2" />
                     Stop Recording
                   </Button>
-                )}
+                ) : isPartCompleted('part2') ? (
+                  <Badge variant="secondary" className="text-green-700 p-3">
+                    ✓ Part 2 Completed
+                  </Badge>
+                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -279,7 +338,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
             <CardHeader>
               <CardTitle className="text-red-600">Part 3: Two-way Discussion</CardTitle>
               <p className="text-sm text-gray-600">
-                Duration: 4-5 minutes. Discussion of more abstract ideas related to Part 2 topic.
+                Duration: 4-5 minutes. Discussion of abstract ideas related to Part 2 topic.
               </p>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -294,7 +353,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
               </div>
               
               <div className="flex justify-center space-x-4">
-                {!isRecording ? (
+                {!isRecording && !isPartCompleted('part3') ? (
                   <Button 
                     onClick={startRecording}
                     className="bg-red-600 hover:bg-red-700"
@@ -303,7 +362,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
                     <Mic className="h-5 w-5 mr-2" />
                     Start Recording
                   </Button>
-                ) : (
+                ) : isRecording ? (
                   <Button 
                     onClick={stopRecording}
                     variant="outline"
@@ -312,6 +371,10 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
                     <Square className="h-5 w-5 mr-2" />
                     Stop Recording
                   </Button>
+                ) : (
+                  <Badge variant="secondary" className="text-green-700 p-3">
+                    ✓ Part 3 Completed
+                  </Badge>
                 )}
               </div>
             </CardContent>
@@ -324,7 +387,7 @@ const SpeakingTest: React.FC<SpeakingTestProps> = ({
           onClick={handleSubmit} 
           size="lg" 
           className="bg-green-600 hover:bg-green-700"
-          disabled={Object.keys(recordings).length < 3}
+          disabled={!allPartsCompleted}
         >
           Submit Speaking Test
         </Button>
