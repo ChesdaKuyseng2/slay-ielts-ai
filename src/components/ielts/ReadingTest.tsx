@@ -62,12 +62,15 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
     setIsSubmitting(true);
     try {
       console.log('Submitting reading test with answers:', answers);
+      
       // Ensure we have valid answers structure
       const validAnswers = {
         ...answers,
         sessionId,
-        completedAt: new Date().toISOString()
+        completedAt: new Date().toISOString(),
+        skillType: 'reading'
       };
+      
       await onComplete(validAnswers);
     } catch (error) {
       console.error('Error submitting reading test:', error);
@@ -80,30 +83,31 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
     }
   };
 
-  // Use AI-generated content if available, otherwise fallback
+  // Use AI-generated content if available, otherwise use enhanced fallback
   const passage = testData?.passage || `
-    <h3>The Impact of Technology on Modern Education</h3>
-    <p><strong>A</strong> The integration of technology in educational settings has revolutionized the way students learn and teachers instruct. From interactive whiteboards to online learning platforms, technology has become an indispensable tool in modern education. This transformation has not only changed the physical classroom environment but has also redefined the roles of both educators and learners.</p>
+    <h3>The Impact of Technology on Modern Education Systems</h3>
     
-    <p><strong>B</strong> Research indicates that students who use technology-enhanced learning methods show improved engagement and retention rates compared to traditional teaching methods. Interactive software, virtual reality experiences, and gamified learning platforms have made complex subjects more accessible and enjoyable for students across all age groups. However, the effectiveness largely depends on how well the technology is integrated into the curriculum and the teacher's ability to adapt their teaching methods accordingly.</p>
+    <p><strong>A</strong> The integration of advanced technology in educational institutions has fundamentally revolutionized the way students learn and teachers deliver instruction across all academic levels. From interactive digital whiteboards and sophisticated learning management systems to comprehensive online platforms and virtual reality experiences, technology has become an indispensable component in contemporary education. This transformation has not only changed the physical classroom environment but has also redefined the traditional roles and responsibilities of both educators and learners in the modern academic landscape.</p>
     
-    <p><strong>C</strong> Despite the numerous benefits, some educators argue that excessive reliance on technology may diminish critical thinking skills and face-to-face interaction among students. The concern is that students might become too dependent on digital tools for problem-solving, potentially affecting their ability to think independently. Additionally, the digital divide continues to be a significant challenge, as not all students have equal access to technological resources.</p>
+    <p><strong>B</strong> Extensive research conducted by leading educational institutions indicates that students who regularly engage with technology-enhanced learning methodologies demonstrate significantly improved engagement levels, retention rates, and academic performance compared to those using conventional teaching approaches. Interactive educational software, immersive virtual reality experiences, and carefully designed gamified learning platforms have successfully made complex subjects more accessible, engaging, and enjoyable for students across diverse age groups and learning abilities. However, the overall effectiveness of these technological interventions largely depends on how systematically and thoughtfully the technology is integrated into the existing curriculum and the educator's willingness and ability to adapt their established teaching methodologies accordingly.</p>
     
-    <p><strong>D</strong> Looking toward the future, the challenge lies in finding the right balance between technological advancement and traditional pedagogical approaches. Educational institutions must carefully consider how to implement technology in ways that enhance rather than replace fundamental teaching practices. The goal should be to use technology as a tool to support and amplify human learning, not to substitute the essential human elements of education.</p>
+    <p><strong>C</strong> Despite the numerous documented benefits and positive outcomes, some experienced educators and child development specialists argue that excessive reliance on digital technology may potentially diminish students' critical thinking capabilities, problem-solving skills, and meaningful face-to-face social interaction among peers. The primary concern raised by these professionals is that students might develop an unhealthy dependence on digital tools and automated systems for problem-solving and decision-making, which could potentially affect their ability to think independently, analyze information critically, and develop essential interpersonal communication skills. Additionally, the persistent digital divide continues to be a significant socioeconomic challenge, as not all students have equal access to high-quality technological resources, reliable internet connectivity, and necessary technical support.</p>
+    
+    <p><strong>D</strong> Looking toward the future of education with realistic optimism and careful consideration, the primary challenge facing educational institutions lies in discovering and maintaining the optimal balance between cutting-edge technological advancement and time-tested traditional pedagogical approaches. Educational policymakers, administrators, and classroom teachers must carefully evaluate and consider how to implement emerging technologies in ways that genuinely enhance and support rather than completely replace the fundamental human elements of effective teaching and meaningful learning. The ultimate goal should be to strategically utilize technology as a powerful supplementary tool that amplifies and supports authentic human learning experiences, rather than attempting to substitute the essential personal connections, mentorship, and individualized guidance that form the cornerstone of quality education.</p>
+    
+    <p><strong>E</strong> The ongoing global discussion and debate surrounding the appropriate role of technology in education reflects the inherent complexity and multifaceted nature of this critical issue in contemporary society. Educational stakeholders, including teachers, administrators, parents, policymakers, and technology developers, continue to collaborate extensively and work together systematically to identify, develop, and implement balanced, effective, and sustainable solutions that adequately address the various challenges and concerns while simultaneously maximizing the tremendous potential benefits and opportunities that technology can provide to enhance educational outcomes for all students.</p>
   `;
 
-  // Fixed questions array - exactly 10 questions
-  const questions = testData?.questions || [
-    'Technology has completely replaced traditional teaching methods in all schools.',
-    'Students show better engagement with technology-enhanced learning according to research.',
-    'All educators support the unlimited use of technology in classrooms.',
-    'The digital divide affects equal access to technological resources for students.',
-    'Finding the right balance between technology and traditional methods is a current challenge.',
-    'Interactive software has made learning more enjoyable for students.',
-    'Virtual reality is mentioned as being used only in higher education.',
-    'The effectiveness of technology depends on proper curriculum integration.',
-    'Face-to-face interaction has completely disappeared from modern classrooms.',
-    'Educational institutions must consider careful implementation of technology.'
+  // Generate exactly 10 questions - 8 True/False/Not Given + 2 Summary Completion
+  const tfngQuestions = [
+    'Technology has completely replaced traditional teaching methods in all educational institutions.',
+    'Students demonstrate better academic performance with technology-enhanced learning according to research studies.',
+    'All educators unanimously support the unlimited integration of technology in classroom environments.',
+    'The digital divide affects students\' equal access to technological educational resources.',
+    'Finding the optimal balance between technology and traditional teaching methods is a current challenge.',
+    'Interactive educational software has made complex subjects more accessible for students.',
+    'Virtual reality technology is mentioned as being used exclusively in higher education institutions.',
+    'The effectiveness of educational technology depends significantly on proper curriculum integration.'
   ];
 
   return (
@@ -131,9 +135,12 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
               <BookOpen className="h-5 w-5 text-blue-600" />
               <span>Reading Passage</span>
             </CardTitle>
+            <p className="text-sm text-gray-600">
+              Read the passage carefully and answer the questions on the right.
+            </p>
           </CardHeader>
           <CardContent>
-            <div className="prose max-w-none text-sm leading-relaxed bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
+            <div className="prose max-w-none text-sm leading-relaxed bg-gray-50 p-6 rounded-lg max-h-[600px] overflow-y-auto border">
               <div dangerouslySetInnerHTML={{ __html: passage }} />
             </div>
           </CardContent>
@@ -144,27 +151,31 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
           <CardHeader>
             <CardTitle>Questions 1-10</CardTitle>
             <p className="text-sm text-gray-600">
-              Read the passage and answer the questions below.
+              Answer all questions based on the reading passage.
             </p>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* True/False/Not Given Questions */}
+            {/* True/False/Not Given Questions (1-8) */}
             <div className="space-y-4">
-              <h3 className="font-semibold text-blue-600">Questions 1-8: True/False/Not Given</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                Write TRUE if the statement agrees with the information<br/>
-                Write FALSE if the statement contradicts the information<br/>
-                Write NOT GIVEN if there is no information on this
-              </p>
+              <h3 className="font-semibold text-blue-600 border-b pb-2">
+                Questions 1-8: True/False/Not Given
+              </h3>
+              <div className="bg-blue-50 p-3 rounded-lg text-sm">
+                <p><strong>TRUE</strong> - if the statement agrees with the information in the passage</p>
+                <p><strong>FALSE</strong> - if the statement contradicts the information in the passage</p>
+                <p><strong>NOT GIVEN</strong> - if there is no information about this in the passage</p>
+              </div>
               
-              {questions.slice(0, 8).map((statement, index) => (
-                <div key={index} className="border-l-2 border-gray-200 pl-4">
+              {tfngQuestions.map((statement, index) => (
+                <div key={index} className="border-l-2 border-gray-200 pl-4 py-2">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <p className="mb-2">{index + 1}. {statement}</p>
+                      <p className="mb-3 text-sm font-medium">
+                        {index + 1}. {statement}
+                      </p>
                       <div className="flex space-x-4">
                         {['TRUE', 'FALSE', 'NOT GIVEN'].map(option => (
-                          <label key={option} className="flex items-center space-x-1 cursor-pointer">
+                          <label key={option} className="flex items-center space-x-2 cursor-pointer">
                             <input
                               type="radio"
                               name={`tfng_${index}`}
@@ -173,7 +184,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
                               onChange={(e) => handleAnswerChange(`tfng_${index}`, e.target.value)}
                               className="text-blue-600"
                             />
-                            <span className="text-sm">{option}</span>
+                            <span className="text-sm font-medium">{option}</span>
                           </label>
                         ))}
                       </div>
@@ -182,6 +193,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
                       variant="ghost"
                       size="sm"
                       onClick={() => onExplainAnswer(index)}
+                      className="ml-2"
                     >
                       <HelpCircle className="h-4 w-4" />
                     </Button>
@@ -190,44 +202,53 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
               ))}
             </div>
 
-            {/* Summary Completion */}
+            {/* Summary Completion Questions (9-10) */}
             <div className="space-y-4 pt-6 border-t">
-              <h3 className="font-semibold text-blue-600">Questions 9-10: Summary Completion</h3>
-              <p className="text-sm text-gray-600">Complete the summary using words from the passage.</p>
+              <h3 className="font-semibold text-blue-600 border-b pb-2">
+                Questions 9-10: Summary Completion
+              </h3>
+              <p className="text-sm text-gray-600 bg-orange-50 p-3 rounded-lg">
+                Complete the summary using <strong>ONE WORD ONLY</strong> from the passage for each answer.
+              </p>
               
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <p className="text-sm leading-relaxed">
-                  9. The integration of technology in education has{' '}
-                  <Input 
-                    className="inline-block w-32 mx-1 h-6 text-xs"
-                    value={answers['summary_1'] || ''}
-                    onChange={(e) => handleAnswerChange('summary_1', e.target.value)}
-                    placeholder="word 1"
-                  />{' '}
-                  the way students learn.
-                </p>
-                <p className="text-sm leading-relaxed mt-2">
-                  10. However, some educators worry about excessive{' '}
-                  <Input 
-                    className="inline-block w-32 mx-1 h-6 text-xs"
-                    value={answers['summary_2'] || ''}
-                    onChange={(e) => handleAnswerChange('summary_2', e.target.value)}
-                    placeholder="word 2"
-                  />{' '}
-                  on digital tools.
-                </p>
+              <div className="bg-gray-50 p-4 rounded-lg border">
+                <div className="space-y-3">
+                  <p className="text-sm leading-relaxed">
+                    <strong>9.</strong> The integration of technology in education has{' '}
+                    <Input 
+                      className="inline-block w-32 mx-1 h-8 text-sm"
+                      value={answers['summary_1'] || ''}
+                      onChange={(e) => handleAnswerChange('summary_1', e.target.value)}
+                      placeholder="word"
+                    />{' '}
+                    the way students learn and teachers deliver instruction.
+                  </p>
+                  
+                  <p className="text-sm leading-relaxed">
+                    <strong>10.</strong> Some educators worry that excessive dependence on digital tools may affect students' ability to think{' '}
+                    <Input 
+                      className="inline-block w-32 mx-1 h-8 text-sm"
+                      value={answers['summary_2'] || ''}
+                      onChange={(e) => handleAnswerChange('summary_2', e.target.value)}
+                      placeholder="word"
+                    />{' '}
+                    and solve problems without technological assistance.
+                  </p>
+                </div>
               </div>
             </div>
 
-            <div className="flex justify-between pt-6 border-t">
+            {/* Submit Section */}
+            <div className="flex justify-between items-center pt-6 border-t bg-gray-50 p-4 rounded-lg">
               <div className="text-sm text-gray-600">
-                Progress: {Object.keys(answers).length} / 10 answered
+                <p><strong>Progress:</strong> {Object.keys(answers).length} / 10 answered</p>
+                <p className="text-xs mt-1">Make sure to answer all questions before submitting</p>
               </div>
               <Button 
                 onClick={handleSubmit} 
                 size="lg" 
                 className="bg-green-600 hover:bg-green-700"
-                disabled={isSubmitting}
+                disabled={isSubmitting || Object.keys(answers).length < 10}
               >
                 {isSubmitting ? 'Submitting...' : 'Submit Answers'}
               </Button>
