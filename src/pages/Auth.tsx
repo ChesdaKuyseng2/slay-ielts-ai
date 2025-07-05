@@ -1,92 +1,142 @@
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Eye, EyeOff } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Eye, EyeOff, Mail, Lock, User, UserCheck } from 'lucide-react';
 import { cleanupAuthState } from '@/utils/authCleanup';
-import { supabase } from '@/integrations/supabase/client';
 
 const Auth = () => {
-  const { signIn, signUp, user, isAdmin, loading } = useAuth();
+  const { signIn, signUp, user, loading } = useAuth();
   const navigate = useNavigate();
-  const [isSignUp, setIsSignUp] = useState(false);
+  const { toast } = useToast();
+  
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    fullName: ''
-  });
-  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [authType, setAuthType] = useState<'signin' | 'signup' | 'admin-signin' | 'admin-signup'>('signin');
+
+  // Auto-fill demo credentials
+  const demoCredentials = {
+    user: { email: 'chesdakuyseng2@gmail.com', password: '123456' },
+    admin: { email: 'chesdakuyseng1@gmail.com', password: '123456' }
+  };
 
   useEffect(() => {
-    if (user && !loading) {
-      console.log('User authenticated, redirecting...', { user, isAdmin });
-      if (isAdmin) {
-        navigate('/admin');
-      } else {
-        navigate('/dashboard');
-      }
+    if (!loading && user) {
+      navigate('/dashboard');
     }
-  }, [user, isAdmin, loading, navigate]);
+  }, [user, loading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    
+    if (authType === 'signup' || authType === 'admin-signup') {
+      if (password !== confirmPassword) {
+        toast({
+          title: "Error",
+          description: "Passwords do not match.",
+          variant: "destructive"
+        });
+        return;
+      }
+      if (password.length < 6) {
+        toast({
+          title: "Error",
+          description: "Password must be at least 6 characters long.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
     setIsLoading(true);
 
     try {
-      // Clean up existing state before auth operations
+      // Clean up any existing auth state
       cleanupAuthState();
-      
-      // Attempt global sign out first
-      try {
-        await supabase.auth.signOut({ scope: 'global' });
-      } catch (err) {
-        // Continue even if this fails
-      }
 
-      console.log('Submitting form:', { isSignUp, email: formData.email });
-      
-      if (isSignUp) {
-        const { error } = await signUp(formData.email, formData.password, formData.fullName);
+      if (authType === 'signin' || authType === 'admin-signin') {
+        const { error } = await signIn(email, password);
         if (error) {
-          console.error('Sign up error:', error);
-          setError(error.message);
-        } else {
-          setError('Please check your email to confirm your account.');
+          throw error;
         }
-      } else {
-        const { error } = await signIn(formData.email, formData.password);
-        if (error) {
-          console.error('Sign in error:', error);
-          setError('Invalid email or password. Please try again.');
-        } else {
-          // Force page reload for clean state
+        
+        toast({
+          title: "Success",
+          description: authType === 'admin-signin' ? "Signed in as admin successfully!" : "Signed in successfully!"
+        });
+        
+        // Force page reload for clean state
+        setTimeout(() => {
           window.location.href = '/dashboard';
+        }, 1000);
+        
+      } else {
+        const { error } = await signUp(email, password, fullName);
+        if (error) {
+          throw error;
         }
+        
+        toast({
+          title: "Success",
+          description: "Account created successfully! Please check your email to verify your account."
+        });
+        
+        // Switch to sign in tab after successful registration
+        setAuthType(authType === 'admin-signup' ? 'admin-signin' : 'signin');
       }
     } catch (error: any) {
       console.error('Auth error:', error);
-      setError('An unexpected error occurred. Please try again.');
+      let errorMessage = "An error occurred. Please try again.";
+      
+      if (error.message?.includes('Invalid login credentials')) {
+        errorMessage = "Invalid email or password. Please check your credentials.";
+      } else if (error.message?.includes('User already registered')) {
+        errorMessage = "An account with this email already exists. Please sign in instead.";
+      } else if (error.message?.includes('Email not confirmed')) {
+        errorMessage = "Please check your email and click the confirmation link before signing in.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive"
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  const sampleUsers = [
-    { email: 'chesdakuyseng2@gmail.com', password: '123456', type: 'Normal User' },
-    { email: 'chesdakuyseng1@gmail.com', password: '123456', type: 'Admin User' }
-  ];
+  const fillDemoCredentials = (type: 'user' | 'admin') => {
+    setEmail(demoCredentials[type].email);
+    setPassword(demoCredentials[type].password);
+    setConfirmPassword(demoCredentials[type].password);
+    setFullName(type === 'admin' ? 'Admin User' : 'Demo User');
+  };
+
+  const handleAuthTypeChange = (value: string) => {
+    setAuthType(value as any);
+    // Clear form when switching types
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setFullName('');
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 to-white">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 via-white to-blue-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading...</p>
@@ -96,127 +146,248 @@ const Auth = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 to-white p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-sky-50 via-white to-blue-50 p-4">
       <div className="w-full max-w-md">
+        {/* Logo */}
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center space-x-2 mb-4">
-            <div className="w-10 h-10 bg-sky-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold">IS</span>
+          <div className="inline-flex items-center space-x-2 mb-4">
+            <div className="w-12 h-12 bg-sky-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-xl">IS</span>
             </div>
             <span className="text-3xl font-bold text-gray-900">IELTSSlay</span>
           </div>
-          <p className="text-gray-600">Master IELTS with AI-powered practice</p>
+          <p className="text-gray-600">Your AI-powered IELTS preparation platform</p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-center">
-              {isSignUp ? 'Create Account' : 'Sign In'}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {isSignUp && (
-                <div>
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input
-                    id="fullName"
-                    type="text"
-                    value={formData.fullName}
-                    onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                    required
-                  />
-                </div>
-              )}
-              
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  required
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                </div>
-              </div>
-
-              {error && (
-                <Alert variant={error.includes('check your email') ? 'default' : 'destructive'}>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? 'Loading...' : (isSignUp ? 'Sign Up' : 'Sign In')}
-              </Button>
-            </form>
-
-            <div className="mt-4 text-center">
-              <Button
-                variant="link"
-                onClick={() => {
-                  setIsSignUp(!isSignUp);
-                  setError('');
-                  setFormData({ email: '', password: '', fullName: '' });
-                }}
+        <Card className="shadow-xl border-0">
+          <CardHeader className="space-y-4">
+            <CardTitle className="text-center text-2xl">Welcome</CardTitle>
+            
+            {/* Demo Credentials */}
+            <div className="grid grid-cols-2 gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => fillDemoCredentials('user')}
+                className="text-xs"
               >
-                {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+                <User className="h-3 w-3 mr-1" />
+                Demo User
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => fillDemoCredentials('admin')}
+                className="text-xs"
+              >
+                <UserCheck className="h-3 w-3 mr-1" />
+                Demo Admin
               </Button>
             </div>
+          </CardHeader>
+          
+          <CardContent>
+            <Tabs value={authType} onValueChange={handleAuthTypeChange}>
+              <TabsList className="grid w-full grid-cols-2 mb-6">
+                <TabsTrigger value="signin">Sign In</TabsTrigger>
+                <TabsTrigger value="signup">Sign Up</TabsTrigger>
+              </TabsList>
+              
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {/* Sign In Tab */}
+                <TabsContent value="signin" className="space-y-4 mt-0">
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <Button 
+                      type="button"
+                      variant={authType === 'signin' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setAuthType('signin')}
+                    >
+                      <User className="h-4 w-4 mr-1" />
+                      User
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant={authType === 'admin-signin' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setAuthType('admin-signin')}
+                    >
+                      <UserCheck className="h-4 w-4 mr-1" />
+                      Admin
+                    </Button>
+                  </div>
+
+                  {authType === 'admin-signin' && (
+                    <Badge variant="outline" className="w-full justify-center py-1">
+                      Signing in as Admin
+                    </Badge>
+                  )}
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Email</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="email"
+                        placeholder="Enter your email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Password</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Enter your password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="pl-10 pr-10"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-3 h-4 w-4 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeOff /> : <Eye />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-sky-600 hover:bg-sky-700" 
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Signing in...' : 'Sign In'}
+                  </Button>
+                </TabsContent>
+
+                {/* Sign Up Tab */}
+                <TabsContent value="signup" className="space-y-4 mt-0">
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <Button 
+                      type="button"
+                      variant={authType === 'signup' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setAuthType('signup')}
+                    >
+                      <User className="h-4 w-4 mr-1" />
+                      User
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant={authType === 'admin-signup' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setAuthType('admin-signup')}
+                    >
+                      <UserCheck className="h-4 w-4 mr-1" />
+                      Admin
+                    </Button>
+                  </div>
+
+                  {authType === 'admin-signup' && (
+                    <Badge variant="outline" className="w-full justify-center py-1">
+                      Creating Admin Account
+                    </Badge>
+                  )}
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Full Name</label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="text"
+                        placeholder="Enter your full name"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Email</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="email"
+                        placeholder="Enter your email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Password</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Create a password (min. 6 characters)"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="pl-10 pr-10"
+                        required
+                        minLength={6}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-3 h-4 w-4 text-gray-400 hover:text-gray-600"
+                      >
+                        {showPassword ? <EyeOff /> : <Eye />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Confirm Password</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Confirm your password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-green-600 hover:bg-green-700" 
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Creating account...' : 'Create Account'}
+                  </Button>
+                </TabsContent>
+              </form>
+            </Tabs>
           </CardContent>
         </Card>
 
-        {/* Sample Users for Testing */}
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="text-sm">Test Login Credentials</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 text-sm">
-              <p className="text-gray-600 mb-3">Test accounts (sign up first to create them):</p>
-              {sampleUsers.map((user, index) => (
-                <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                  <div>
-                    <div className="font-medium">{user.email}</div>
-                    <div className="text-gray-500">{user.type}</div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setFormData({ ...formData, email: user.email, password: user.password })}
-                  >
-                    Use
-                  </Button>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4 p-3 bg-blue-50 rounded text-sm text-blue-700">
-              <p><strong>Note:</strong> Sign up with these credentials first, then you can sign in.</p>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="text-center mt-6">
+          <Button 
+            variant="ghost" 
+            onClick={() => navigate('/')}
+            className="text-gray-600 hover:text-gray-900"
+          >
+            ← Back to Home
+          </Button>
+        </div>
       </div>
     </div>
   );
