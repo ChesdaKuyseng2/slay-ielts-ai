@@ -61,8 +61,13 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
     
     setIsSubmitting(true);
     try {
-      // Ensure we have valid answers
-      const validAnswers = Object.keys(answers).length > 0 ? answers : { default: 'No answers provided' };
+      console.log('Submitting reading test with answers:', answers);
+      // Ensure we have valid answers structure
+      const validAnswers = {
+        ...answers,
+        sessionId,
+        completedAt: new Date().toISOString()
+      };
       await onComplete(validAnswers);
     } catch (error) {
       console.error('Error submitting reading test:', error);
@@ -71,7 +76,6 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
         description: "There was an error submitting your test. Please try again.",
         variant: "destructive"
       });
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -88,6 +92,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
     <p><strong>D</strong> Looking toward the future, the challenge lies in finding the right balance between technological advancement and traditional pedagogical approaches. Educational institutions must carefully consider how to implement technology in ways that enhance rather than replace fundamental teaching practices. The goal should be to use technology as a tool to support and amplify human learning, not to substitute the essential human elements of education.</p>
   `;
 
+  // Fixed questions array - exactly 10 questions
   const questions = testData?.questions || [
     'Technology has completely replaced traditional teaching methods in all schools.',
     'Students show better engagement with technology-enhanced learning according to research.',
@@ -164,6 +169,7 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
                               type="radio"
                               name={`tfng_${index}`}
                               value={option}
+                              checked={answers[`tfng_${index}`] === option}
                               onChange={(e) => handleAnswerChange(`tfng_${index}`, e.target.value)}
                               className="text-blue-600"
                             />
@@ -191,18 +197,24 @@ const ReadingTest: React.FC<ReadingTestProps> = ({
               
               <div className="bg-gray-50 p-4 rounded-lg">
                 <p className="text-sm leading-relaxed">
-                  The integration of technology in education has <Input 
+                  9. The integration of technology in education has{' '}
+                  <Input 
                     className="inline-block w-32 mx-1 h-6 text-xs"
                     value={answers['summary_1'] || ''}
                     onChange={(e) => handleAnswerChange('summary_1', e.target.value)}
                     placeholder="word 1"
-                  /> the way students learn. However, some educators worry about excessive 
+                  />{' '}
+                  the way students learn.
+                </p>
+                <p className="text-sm leading-relaxed mt-2">
+                  10. However, some educators worry about excessive{' '}
                   <Input 
                     className="inline-block w-32 mx-1 h-6 text-xs"
                     value={answers['summary_2'] || ''}
                     onChange={(e) => handleAnswerChange('summary_2', e.target.value)}
                     placeholder="word 2"
-                  /> on digital tools.
+                  />{' '}
+                  on digital tools.
                 </p>
               </div>
             </div>

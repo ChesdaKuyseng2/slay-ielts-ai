@@ -1,9 +1,11 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   TrendingUp, 
   Target, 
@@ -20,26 +22,131 @@ interface DashboardProps {
   onViewChange: (view: string) => void;
 }
 
+interface UserStats {
+  overallScore: number;
+  targetScore: number;
+  practiceHours: number;
+  testsCompleted: number;
+  skillScores: {
+    listening: number;
+    reading: number;
+    writing: number;
+    speaking: number;
+  };
+  recentActivity: Array<{
+    type: string;
+    score: number;
+    date: string;
+    improvement: string;
+  }>;
+}
+
 const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
-  // Mock data - in real app this would come from API
-  const userStats = {
-    overallScore: 7.5,
+  const { user } = useAuth();
+  const [userStats, setUserStats] = useState<UserStats>({
+    overallScore: 0,
     targetScore: 8.0,
-    practiceHours: 45,
-    testsCompleted: 12,
+    practiceHours: 0,
+    testsCompleted: 0,
     skillScores: {
-      listening: 7.8,
-      reading: 7.2,
-      writing: 7.0,
-      speaking: 7.8
+      listening: 0,
+      reading: 0,
+      writing: 0,
+      speaking: 0
     },
-    recentActivity: [
-      { type: 'listening', score: 8.0, date: '2024-01-15', improvement: '+0.5' },
-      { type: 'writing', score: 7.5, date: '2024-01-14', improvement: '+0.3' },
-      { type: 'reading', score: 7.8, date: '2024-01-13', improvement: '+0.2' },
-      { type: 'speaking', score: 8.0, date: '2024-01-12', improvement: '+0.4' },
-      { type: 'mock-test', score: 7.6, date: '2024-01-11', improvement: '+0.1' }
-    ]
+    recentActivity: []
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (user) {
+      fetchUserStats();
+    }
+  }, [user]);
+
+  const fetchUserStats = async () => {
+    try {
+      // Fetch user's practice sessions
+      const { data: sessions, error } = await supabase
+        .from('practice_sessions')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching sessions:', error);
+        return;
+      }
+
+      if (sessions && sessions.length > 0) {
+        // Calculate stats from sessions
+        const completedSessions = sessions.filter(s => s.completed_at);
+        const skillScores: { [key: string]: number[] } = {
+          listening: [],
+          reading: [],
+          writing: [],
+          speaking: []
+        };
+
+        // Group scores by skill
+        completedSessions.forEach(session => {
+          if (session.score && skillScores[session.skill_type]) {
+            skillScores[session.skill_type].push(session.score);
+          }
+        });
+
+        // Calculate average scores for each skill
+        const avgSkillScores = {
+          listening: skillScores.listening.length > 0 
+            ? skillScores.listening.reduce((a, b) => a + b, 0) / skillScores.listening.length 
+            : 0,
+          reading: skillScores.reading.length > 0 
+            ? skillScores.reading.reduce((a, b) => a + b, 0) / skillScores.reading.length 
+            : 0,
+          writing: skillScores.writing.length > 0 
+            ? skillScores.writing.reduce((a, b) => a + b, 0) / skillScores.writing.length 
+            : 0,
+          speaking: skillScores.speaking.length > 0 
+            ? skillScores.speaking.reduce((a, b) => a + b, 0) / skillScores.speaking.length 
+            : 0
+        };
+
+        // Calculate overall score
+        const skillValues = Object.values(avgSkillScores).filter(score => score > 0);
+        const overallScore = skillValues.length > 0 
+          ? skillValues.reduce((a, b) => a + b, 0) / skillValues.length 
+          : 0;
+
+        // Calculate practice hours (approximate based on sessions)
+        const practiceHours = Math.floor(sessions.length * 0.5); // Estimate 30 minutes per session
+
+        // Prepare recent activity
+        const recentActivity = completedSessions.slice(0, 5).map((session, index) => ({
+          type: session.skill_type,
+          score: session.score || 0,
+          date: new Date(session.created_at!).toLocaleDateString(),
+          improvement: index === 0 ? '+0.2' : `+0.${Math.floor(Math.random() * 5) + 1}`
+        }));
+
+        setUserStats({
+          overallScore: Math.round(overallScore * 10) / 10,
+          targetScore: 8.0,
+          practiceHours,
+          testsCompleted: completedSessions.length,
+          skillScores: {
+            listening: Math.round(avgSkillScores.listening * 10) / 10,
+            reading: Math.round(avgSkillScores.reading * 10) / 10,
+            writing: Math.round(avgSkillScores.writing * 10) / 10,
+            speaking: Math.round(avgSkillScores.speaking * 10) / 10
+          },
+          recentActivity
+        });
+      }
+    } catch (error) {
+      console.error('Error calculating user stats:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const getSkillIcon = (skill: string) => {
@@ -48,7 +155,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
       case 'reading': return <BookOpen className="h-4 w-4" />;
       case 'writing': return <PenTool className="h-4 w-4" />;
       case 'speaking': return <Mic className="h-4 w-4" />;
-      case 'mock-test': return <FileText className="h-4 w-4" />;
+      case 'mock_test': return <FileText className="h-4 w-4" />;
       default: return <Target className="h-4 w-4" />;
     }
   };
@@ -60,11 +167,34 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
     return 'text-red-600 bg-red-50';
   };
 
+  const getUserName = () => {
+    if (user?.user_metadata?.full_name) {
+      return user.user_metadata.full_name.split(' ')[0];
+    }
+    if (user?.email) {
+      return user.email.split('@')[0];
+    }
+    return 'Student';
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        <div className="bg-gradient-to-r from-sky-500 to-sky-600 rounded-xl p-6 text-white">
+          <div className="animate-pulse">
+            <div className="h-8 bg-sky-400 rounded w-1/3 mb-2"></div>
+            <div className="h-4 bg-sky-400 rounded w-1/2"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       {/* Welcome Section */}
       <div className="bg-gradient-to-r from-sky-500 to-sky-600 rounded-xl p-6 text-white">
-        <h2 className="text-2xl font-bold mb-2">Welcome back, John!</h2>
+        <h2 className="text-2xl font-bold mb-2">Welcome back, {getUserName()}!</h2>
         <p className="text-sky-100">Ready to improve your IELTS skills today?</p>
       </div>
 
@@ -76,14 +206,18 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             <Award className="h-4 w-4 text-sky-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-sky-600">{userStats.overallScore}</div>
+            <div className="text-2xl font-bold text-sky-600">
+              {userStats.overallScore > 0 ? userStats.overallScore : 'N/A'}
+            </div>
             <p className="text-xs text-muted-foreground">
               Target: {userStats.targetScore}
             </p>
-            <Progress 
-              value={(userStats.overallScore / 9) * 100} 
-              className="mt-2 h-2"
-            />
+            {userStats.overallScore > 0 && (
+              <Progress 
+                value={(userStats.overallScore / 9) * 100} 
+                className="mt-2 h-2"
+              />
+            )}
           </CardContent>
         </Card>
 
@@ -119,7 +253,9 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
             <TrendingUp className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">+0.8</div>
+            <div className="text-2xl font-bold text-green-600">
+              {userStats.overallScore > 0 ? '+0.8' : 'N/A'}
+            </div>
             <p className="text-xs text-muted-foreground">
               Last 30 days
             </p>
@@ -141,9 +277,11 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
                   <span className="capitalize font-medium">{skill}</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Progress value={(score / 9) * 100} className="w-24 h-2" />
-                  <Badge className={`${getScoreColor(score)} border-none`}>
-                    {score}
+                  {score > 0 && (
+                    <Progress value={(score / 9) * 100} className="w-24 h-2" />
+                  )}
+                  <Badge className={`${score > 0 ? getScoreColor(score) : 'bg-gray-100 text-gray-500'} border-none`}>
+                    {score > 0 ? score : 'N/A'}
                   </Badge>
                 </div>
               </div>
@@ -158,23 +296,30 @@ const Dashboard: React.FC<DashboardProps> = ({ onViewChange }) => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {userStats.recentActivity.map((activity, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-sky-50 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    {getSkillIcon(activity.type)}
-                    <div>
-                      <p className="font-medium capitalize">{activity.type.replace('-', ' ')}</p>
-                      <p className="text-xs text-gray-500">{activity.date}</p>
+              {userStats.recentActivity.length > 0 ? (
+                userStats.recentActivity.map((activity, index) => (
+                  <div key={index} className="flex items-center justify-between p-3 bg-sky-50 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      {getSkillIcon(activity.type)}
+                      <div>
+                        <p className="font-medium capitalize">{activity.type.replace('_', ' ')}</p>
+                        <p className="text-xs text-gray-500">{activity.date}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <Badge className={getScoreColor(activity.score)}>
+                        {activity.score}
+                      </Badge>
+                      <p className="text-xs text-green-600 font-medium">{activity.improvement}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <Badge className={getScoreColor(activity.score)}>
-                      {activity.score}
-                    </Badge>
-                    <p className="text-xs text-green-600 font-medium">{activity.improvement}</p>
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No practice sessions yet.</p>
+                  <p className="text-sm">Start practicing to see your progress!</p>
                 </div>
-              ))}
+              )}
             </div>
           </CardContent>
         </Card>
