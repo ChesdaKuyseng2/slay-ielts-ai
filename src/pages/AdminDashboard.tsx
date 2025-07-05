@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
+import { Profile, PracticeSession, ContentItem, SystemSetting } from '@/types/database';
 import { 
   Users, 
   BarChart3, 
@@ -34,10 +35,10 @@ const AdminDashboard = () => {
     totalSessions: 0,
     activeSessions: 0
   });
-  const [users, setUsers] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [contentItems, setContentItems] = useState([]);
-  const [systemSettings, setSystemSettings] = useState([]);
+  const [users, setUsers] = useState<Profile[]>([]);
+  const [sessions, setSessions] = useState<PracticeSession[]>([]);
+  const [contentItems, setContentItems] = useState<ContentItem[]>([]);
+  const [systemSettings, setSystemSettings] = useState<SystemSetting[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -74,10 +75,10 @@ const AdminDashboard = () => {
         .from('system_settings')
         .select('*');
 
-      setUsers(usersData || []);
-      setSessions(sessionsData || []);
-      setContentItems(contentData || []);
-      setSystemSettings(settingsData || []);
+      setUsers((usersData as Profile[]) || []);
+      setSessions((sessionsData as PracticeSession[]) || []);
+      setContentItems((contentData as ContentItem[]) || []);
+      setSystemSettings((settingsData as SystemSetting[]) || []);
 
       // Calculate stats
       const premiumCount = usersData?.filter(u => u.subscription_type === 'premium').length || 0;
@@ -209,7 +210,7 @@ const AdminDashboard = () => {
                   </div>
                   
                   <div className="space-y-2">
-                    {users.map((user: any) => (
+                    {users.map((user) => (
                       <div key={user.id} className="flex items-center justify-between p-4 border rounded-lg">
                         <div>
                           <div className="font-medium">{user.full_name}</div>
@@ -251,7 +252,7 @@ const AdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {contentItems.map((item: any) => (
+                  {contentItems.map((item) => (
                     <div key={item.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div>
                         <div className="font-medium">{item.title}</div>
@@ -338,7 +339,7 @@ const AdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {sessions.map((session: any) => (
+                  {sessions.map((session) => (
                     <div key={session.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div>
                         <div className="font-medium">{session.profiles?.full_name}</div>
@@ -372,7 +373,7 @@ const AdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
-                  {systemSettings.map((setting: any) => (
+                  {systemSettings.map((setting) => (
                     <div key={setting.id} className="flex items-center justify-between p-4 border rounded-lg">
                       <div>
                         <div className="font-medium">{setting.key}</div>
