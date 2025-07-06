@@ -1,8 +1,10 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import ProfessionalPracticeSession from './ProfessionalPracticeSession';
+import PracticeSession from './PracticeSession';
 import { 
   Headphones, 
   BookOpen, 
@@ -15,7 +17,8 @@ import {
   TrendingUp,
   Zap,
   Target,
-  Award
+  Award,
+  Brain
 } from 'lucide-react';
 
 interface IeltsAIProps {
@@ -24,6 +27,7 @@ interface IeltsAIProps {
 
 const IeltsAI: React.FC<IeltsAIProps> = ({ onViewChange }) => {
   const [currentSession, setCurrentSession] = useState<string | null>(null);
+  const [sessionType, setSessionType] = useState<'quick' | 'ai'>('quick');
 
   const skills = [
     {
@@ -80,9 +84,16 @@ const IeltsAI: React.FC<IeltsAIProps> = ({ onViewChange }) => {
     }
   ];
 
-  const handleStartNew = (skillId: string) => {
-    console.log(`Starting new ${skillId} session`);
+  const handleStartQuick = (skillId: string) => {
+    console.log(`Starting quick ${skillId} session`);
     setCurrentSession(skillId);
+    setSessionType('quick');
+  };
+
+  const handleStartAI = (skillId: string) => {
+    console.log(`Starting AI ${skillId} session`);
+    setCurrentSession(skillId);
+    setSessionType('ai');
   };
 
   const handleBackToSkills = () => {
@@ -90,13 +101,22 @@ const IeltsAI: React.FC<IeltsAIProps> = ({ onViewChange }) => {
   };
 
   if (currentSession) {
-    return (
-      <ProfessionalPracticeSession 
-        skill={currentSession} 
-        duration={1800} // 30 minutes
-        onComplete={handleBackToSkills}
-      />
-    );
+    if (sessionType === 'ai') {
+      return (
+        <PracticeSession 
+          skillType={currentSession} 
+          onBack={handleBackToSkills}
+        />
+      );
+    } else {
+      return (
+        <ProfessionalPracticeSession 
+          skill={currentSession} 
+          duration={1800} // 30 minutes
+          onComplete={handleBackToSkills}
+        />
+      );
+    }
   }
 
   return (
@@ -157,8 +177,7 @@ const IeltsAI: React.FC<IeltsAIProps> = ({ onViewChange }) => {
         {skills.map((skill) => (
           <Card 
             key={skill.id} 
-            className="group hover:shadow-lg transition-all duration-300 cursor-pointer"
-            onClick={() => handleStartNew(skill.id)}
+            className="group hover:shadow-lg transition-all duration-300"
           >
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -201,17 +220,24 @@ const IeltsAI: React.FC<IeltsAIProps> = ({ onViewChange }) => {
                 </div>
               </div>
 
-              {/* Action Button */}
-              <Button 
-                className={`w-full bg-gradient-to-r ${skill.color} hover:opacity-90 group-hover:scale-105 transition-transform`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleStartNew(skill.id);
-                }}
-              >
-                <Play className="h-4 w-4 mr-2" />
-                Start Test
-              </Button>
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-2 pt-2">
+                <Button 
+                  className={`w-full bg-gradient-to-r ${skill.color} hover:opacity-90 group-hover:scale-105 transition-transform text-sm`}
+                  onClick={() => handleStartQuick(skill.id)}
+                >
+                  <Play className="h-3 w-3 mr-1" />
+                  Quick Test
+                </Button>
+                <Button 
+                  variant="outline"
+                  className="w-full border-2 hover:bg-purple-50 text-sm"
+                  onClick={() => handleStartAI(skill.id)}
+                >
+                  <Brain className="h-3 w-3 mr-1" />
+                  AI Test
+                </Button>
+              </div>
             </CardContent>
           </Card>
         ))}

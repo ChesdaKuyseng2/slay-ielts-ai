@@ -30,6 +30,11 @@ interface Feedback {
   explanation: string;
 }
 
+interface ContentData {
+  questions: Question[];
+  [key: string]: any;
+}
+
 const generateFallbackQuestions = (skill: string): Question[] => {
   const baseQuestions = [
     {
@@ -80,7 +85,7 @@ const generateFallbackQuestions = (skill: string): Question[] => {
   return baseQuestions;
 };
 
-const loadPreGeneratedContent = async (skill: string) => {
+const loadPreGeneratedContent = async (skill: string): Promise<ContentData | null> => {
   console.log(`Loading pre-generated content for ${skill}`);
   
   try {
@@ -89,16 +94,18 @@ const loadPreGeneratedContent = async (skill: string) => {
       .select('*')
       .eq('skill_type', skill.toLowerCase())
       .eq('is_active', true)
-      .limit(1)
-      .single();
+      .limit(1);
 
     if (error && error.code !== 'PGRST116') {
       throw error;
     }
 
-    if (data && data.content && typeof data.content === 'object') {
-      console.log('Found pre-generated content:', data.content);
-      return data.content;
+    if (data && data.length > 0 && data[0].content) {
+      const contentData = data[0].content as ContentData;
+      if (contentData && Array.isArray(contentData.questions)) {
+        console.log('Found pre-generated content:', contentData);
+        return contentData;
+      }
     }
 
     console.log(`No pre-generated content found for ${skill}, using fallback`);
@@ -118,7 +125,7 @@ const ProfessionalPracticeSession: React.FC<PracticeSessionProps> = ({ skill, du
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
-  const [content, setContent] = useState<any>(null);
+  const [content, setContent] = useState<ContentData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -129,10 +136,7 @@ const ProfessionalPracticeSession: React.FC<PracticeSessionProps> = ({ skill, du
       try {
         const preGeneratedContent = await loadPreGeneratedContent(skill);
         
-        if (preGeneratedContent && 
-            typeof preGeneratedContent === 'object' && 
-            'questions' in preGeneratedContent &&
-            Array.isArray(preGeneratedContent.questions)) {
+        if (preGeneratedContent && Array.isArray(preGeneratedContent.questions)) {
           console.log('Using pre-generated questions:', preGeneratedContent.questions);
           setContent(preGeneratedContent);
           setQuestions(preGeneratedContent.questions);
