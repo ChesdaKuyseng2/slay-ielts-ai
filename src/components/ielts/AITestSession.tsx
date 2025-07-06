@@ -91,17 +91,9 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         p_test_content: testContent
       });
       
-      if (!rpcError) return;
-      
-      // Fallback to direct insert if RPC fails
-      console.warn('RPC failed, using direct insert:', rpcError);
-      await supabase.from('test_history').insert({
-        user_id: userId,
-        session_id: sessionId,
-        test_type: testType,
-        skill_type: skillType,
-        test_content: testContent
-      });
+      if (rpcError) {
+        console.warn('RPC insert_test_history failed:', rpcError);
+      }
     } catch (error) {
       console.warn('Failed to track test history:', error);
     }
@@ -118,18 +110,9 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         p_time_spent: timeSpent
       });
       
-      if (!rpcError) return;
-      
-      // Fallback to direct update if RPC fails
-      console.warn('RPC failed, using direct update:', rpcError);
-      await supabase.from('test_history').update({
-        user_responses: userResponses,
-        scores: scores,
-        feedback: feedback,
-        time_spent: timeSpent,
-        completed: true,
-        updated_at: new Date().toISOString()
-      }).eq('session_id', sessionId);
+      if (rpcError) {
+        console.warn('RPC update_test_history failed:', rpcError);
+      }
     } catch (error) {
       console.warn('Failed to update test history:', error);
     }
