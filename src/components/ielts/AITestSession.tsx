@@ -45,7 +45,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
   const [showResults, setShowResults] = useState(false);
   const [aiFeedback, setAiFeedback] = useState<AIFeedback | null>(null);
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
-  const [usePreGenerated, setUsePreGenerated] = useState(false);
+  const [testStartTime, setTestStartTime] = useState<Date | null>(null);
 
   const skillIcons = {
     listening: <Headphones className="h-6 w-6" />,
@@ -61,7 +61,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
     speaking: 'from-orange-500 to-orange-600'
   };
 
-  // Get integer band score (rounds to nearest 0.5, then displays as whole number)
+  // Get integer band score (rounds to nearest 0.5)
   const getDisplayScore = (score: number): number => {
     return Math.round(score * 2) / 2;
   };
@@ -92,7 +92,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
     }
   }, [skillType, user]);
 
-  const loadPreGeneratedTest = async () => {
+  const loadPreGeneratedTest = async (): Promise<boolean> => {
     try {
       console.log(`Loading pre-generated ${skillType} test from database`);
       
@@ -105,7 +105,8 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         .limit(1);
 
       if (error) {
-        throw error;
+        console.error('Error loading pre-generated test:', error);
+        return false;
       }
 
       if (preGeneratedTests && preGeneratedTests.length > 0) {
@@ -122,13 +123,25 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
           .insert({
             user_id: user!.id,
             test_id: selectedTest.id,
-            skill_type: skillType
+            skill_type: skillType,
+            started_at: new Date().toISOString()
           })
           .select()
           .single();
 
-        if (!sessionError) {
+        if (!sessionError && session) {
           setSessionId(session.id);
+          
+          // Track in history
+          await supabase
+            .from('test_history')
+            .insert({
+              user_id: user!.id,
+              session_id: session.id,
+              test_type: 'ai',
+              skill_type: skillType,
+              test_content: selectedTest.content
+            });
         }
 
         toast({
@@ -143,23 +156,6 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
       console.error('Error loading pre-generated test:', error);
       return false;
     }
-  };
-
-  const getBackupTest = async (skill: string) => {
-    // Try to get a pre-generated test from database as backup
-    const { data: backupTests, error } = await supabase
-      .from('ai_generated_tests')
-      .select('*')
-      .eq('skill_type', skill)
-      .eq('is_active', true)
-      .limit(1);
-
-    if (!error && backupTests && backupTests.length > 0) {
-      return backupTests[0];
-    }
-
-    // If no backup test exists, create a fallback test structure
-    return createFallbackTest(skill);
   };
 
   const createFallbackTest = (skill: string) => {
@@ -311,15 +307,6 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
     try {
       console.log(`Generating AI test for ${skillType}`);
       
-      // If user wants pre-generated content, load from database
-      if (usePreGenerated) {
-        const loaded = await loadPreGeneratedTest();
-        if (loaded) {
-          setIsLoading(false);
-          return;
-        }
-      }
-      
       // First, try to generate fresh content with Gemini API
       let testData;
       let topic = `AI Generated ${skillType} Test`;
@@ -327,7 +314,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
       try {
         const response = await supabase.functions.invoke('gemini-chat', {
           body: {
-            message: `Generate a comprehensive IELTS ${skillType} test with detailed questions and realistic content`,
+            message: `Generate a comprehensive IELTS ${skillType} test with detailed questions and realistic content. Format the response as valid JSON.`,
             skill: skillType,
             generateContent: true
           }
@@ -337,46 +324,61 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
           throw response.error;
         }
 
-        try {
-          testData = JSON.parse(response.data.response);
-          topic = response.data.topic || topic;
-        } catch {
-          // If parsing fails, use the text response to create structured content
-          testData = createStructuredContent(response.data.response, skillType);
+        if (response.data && response.data.response) {
+          try {
+            testData = JSON.parse(response.data.response);
+            topic = response.data.topic || topic;
+          } catch (parseError) {
+            console.warn('Failed to parse AI response, using fallback');
+            throw parseError;
+          }
+        } else {
+          throw new Error('No response data from AI');
         }
       } catch (apiError) {
-        console.warn('AI generation failed, using backup test:', apiError);
-        // Fallback to backup test if AI generation fails
-        const backupTest = await getBackupTest(skillType);
-        testData = backupTest.content;
-        topic = backupTest.topic || topic;
+        console.warn('AI generation failed, trying pre-generated test:', apiError);
+        
+        // Try to load pre-generated test as fallback
+        const preGenLoaded = await loadPreGeneratedTest();
+        if (preGenLoaded) {
+          setIsLoading(false);
+          return;
+        }
+        
+        // Final fallback to hardcoded test
+        const fallbackTest = createFallbackTest(skillType);
+        testData = fallbackTest.content;
+        topic = fallbackTest.topic;
       }
 
-      // Store the test in database (either AI-generated or backup)
+      // Store the test in database
       const { data: storedTest, error: storeError } = await supabase
         .from('ai_generated_tests')
         .insert({
           skill_type: skillType,
           content: testData,
-          topic: topic
+          topic: topic,
+          difficulty_level: 'intermediate'
         })
         .select()
         .single();
 
-      if (storeError) {
-        console.warn('Failed to store test, using fallback:', storeError);
-        // If storage fails, use fallback test directly
+      let finalTestId = null;
+      if (!storeError && storedTest) {
+        finalTestId = storedTest.id;
+        setTestContent({
+          id: storedTest.id,
+          content: testData,
+          topic: storedTest.topic || topic
+        });
+      } else {
+        console.warn('Failed to store test, using local content:', storeError);
+        // Use fallback test directly
         const fallbackTest = createFallbackTest(skillType);
         setTestContent({
           id: fallbackTest.id,
           content: fallbackTest.content,
           topic: fallbackTest.topic
-        });
-      } else {
-        setTestContent({
-          id: storedTest.id,
-          content: testData,
-          topic: storedTest.topic || topic
         });
       }
 
@@ -385,18 +387,30 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         .from('ai_test_sessions')
         .insert({
           user_id: user.id,
-          test_id: storedTest?.id || null,
-          skill_type: skillType
+          test_id: finalTestId,
+          skill_type: skillType,
+          started_at: new Date().toISOString()
         })
         .select()
         .single();
 
-      if (!sessionError) {
+      if (!sessionError && session) {
         setSessionId(session.id);
+        
+        // Track in history
+        await supabase
+          .from('test_history')
+          .insert({
+            user_id: user.id,
+            session_id: session.id,
+            test_type: 'ai',
+            skill_type: skillType,
+            test_content: testData
+          });
       }
       
       toast({
-        title: usePreGenerated ? "Pre-generated Test Ready" : "AI Test Ready",
+        title: "AI Test Ready",
         description: `Your personalized ${skillType} test is ready!`
       });
 
@@ -419,129 +433,41 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
     }
   };
 
-  const createStructuredContent = (textContent: string, skill: string) => {
-    const baseContent = {
-      title: `AI Generated ${skill.charAt(0).toUpperCase() + skill.slice(1)} Test`,
-      description: textContent.substring(0, 200) + '...',
-      instructions: `Complete this ${skill} test to the best of your ability.`
-    };
-
-    switch (skill) {
-      case 'listening':
-        return {
-          ...baseContent,
-          transcript: textContent,
-          questions: generateFallbackQuestions(skill, 10),
-          section: 1
-        };
-      case 'reading':
-        return {
-          ...baseContent,
-          passage: textContent,
-          questions: generateFallbackQuestions(skill, 10)
-        };
-      case 'writing':
-        return {
-          ...baseContent,
-          task1: {
-            prompt: "Describe the chart/graph/table shown below. Summarize the information and make comparisons where relevant.",
-            type: "data_description"
-          },
-          task2: {
-            prompt: textContent.length > 100 ? textContent : "Some people believe technology has made our lives easier, while others think it has made life more complicated. Discuss both views and give your opinion.",
-            type: "argumentative_essay"
-          }
-        };
-      case 'speaking':
-        return {
-          ...baseContent,
-          part1: generateSpeakingQuestions('part1'),
-          part2: {
-            topic: "Describe a memorable experience",
-            cue_card: "You should say: What the experience was, When it happened, Who was involved, Why it was memorable",
-            preparation_time: 60,
-            speaking_time: 120
-          },
-          part3: generateSpeakingQuestions('part3')
-        };
-      default:
-        return baseContent;
-    }
-  };
-
-  const generateFallbackQuestions = (skill: string, count: number) => {
-    const questions = [];
-    for (let i = 1; i <= count; i++) {
-      if (skill === 'listening' || skill === 'reading') {
-        questions.push({
-          id: i,
-          type: i % 3 === 0 ? 'fill_blank' : 'multiple_choice',
-          question: `Question ${i}: What is the main point discussed in this section?`,
-          options: i % 3 !== 0 ? ['Option A', 'Option B', 'Option C', 'Option D'] : undefined,
-          correctAnswer: i % 3 !== 0 ? 'Option A' : 'answer'
-        });
-      }
-    }
-    return questions;
-  };
-
-  const generateSpeakingQuestions = (part: string) => {
-    if (part === 'part1') {
-      return [
-        "Tell me about your hometown.",
-        "What do you like to do in your free time?",
-        "How do you usually spend your weekends?",
-        "What are your future plans?"
-      ];
-    } else {
-      return [
-        "How do you think technology will change in the future?",
-        "What role does education play in society?",
-        "How important is it to preserve cultural traditions?",
-        "What are the benefits and drawbacks of globalization?"
-      ];
-    }
-  };
-
   const handleTestComplete = async (responses: any) => {
     if (!sessionId || !testContent) return;
 
+    const timeSpent = testStartTime ? Math.floor((new Date().getTime() - testStartTime.getTime()) / 1000) : 0;
     setIsGeneratingFeedback(true);
+    
     try {
-      // Generate comprehensive AI feedback for IELTS criteria
+      // Generate comprehensive AI feedback
       const feedbackPrompt = `
         As an expert IELTS examiner, analyze this ${skillType} test response and provide detailed, professional feedback following official IELTS criteria:
         
         Test Content: ${JSON.stringify(testContent.content)}
         User Responses: ${JSON.stringify(responses)}
         
-        Provide comprehensive analysis for IELTS ${skillType} criteria with specific band scores:
+        Provide comprehensive analysis for IELTS ${skillType} criteria with specific band scores (0-9, rounded to nearest 0.5):
         ${skillType === 'writing' ? `
-        - Task Achievement (Task 1) / Task Response (Task 2): 0-9 band score with detailed explanation
-        - Coherence and Cohesion: 0-9 band score with specific examples from the response
-        - Lexical Resource: 0-9 band score analyzing vocabulary range and accuracy
-        - Grammatical Range and Accuracy: 0-9 band score examining sentence structures and errors
+        - Task Achievement (Task 1) / Task Response (Task 2): Detailed band score analysis
+        - Coherence and Cohesion: Specific examples and band score
+        - Lexical Resource: Vocabulary analysis with band score  
+        - Grammatical Range and Accuracy: Grammar evaluation with band score
         ` : skillType === 'speaking' ? `
-        - Fluency and Coherence: 0-9 band score analyzing flow and organization
-        - Lexical Resource: 0-9 band score examining vocabulary variety and appropriateness
-        - Grammatical Range and Accuracy: 0-9 band score evaluating grammar complexity and accuracy
-        - Pronunciation: 0-9 band score assessing clarity and natural rhythm
+        - Fluency and Coherence: Flow and organization analysis with band score
+        - Lexical Resource: Vocabulary variety and appropriateness with band score
+        - Grammatical Range and Accuracy: Grammar complexity and accuracy with band score
+        - Pronunciation: Clarity and natural rhythm assessment with band score
         ` : `
-        - Main Ideas: 0-9 band score for understanding central concepts
-        - Supporting Details: 0-9 band score for identifying specific information
-        - Inference: 0-9 band score for drawing logical conclusions
-        - Global Understanding: 0-9 band score for overall comprehension
+        - Main Ideas: Understanding central concepts with band score
+        - Supporting Details: Identifying specific information with band score
+        - Inference: Drawing logical conclusions with band score
+        - Global Understanding: Overall comprehension with band score
         `}
-        
-        For each criterion, provide:
-        1. Specific examples from the user's response
-        2. Clear explanation of why this band score was awarded
-        3. Detailed suggestions for improvement to reach higher bands
-        4. Recognition of strengths demonstrated
         
         Format as JSON:
         {
-          "overall_score": number (0-9, average of all criteria),
+          "overall_score": number (0-9, average of all criteria, rounded to nearest 0.5),
           "category_scores": {
             "criterion1": number,
             "criterion2": number,
@@ -550,12 +476,12 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
           },
           "strengths": [5-7 specific positive aspects with examples],
           "improvements": [5-7 specific areas to improve with actionable advice],
-          "detailed_feedback": "Comprehensive paragraph explaining overall performance with specific references to the response",
+          "detailed_feedback": "Comprehensive paragraph explaining overall performance with specific references",
           "band_descriptors": {
-            "criterion1": "Detailed explanation of performance level with specific examples",
-            "criterion2": "Detailed explanation of performance level with specific examples",
-            "criterion3": "Detailed explanation of performance level with specific examples",
-            "criterion4": "Detailed explanation of performance level with specific examples"
+            "criterion1": "Detailed explanation with specific examples",
+            "criterion2": "Detailed explanation with specific examples",
+            "criterion3": "Detailed explanation with specific examples",
+            "criterion4": "Detailed explanation with specific examples"
           }
         }
       `;
@@ -566,7 +492,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         const feedbackResponse = await supabase.functions.invoke('gemini-chat', {
           body: {
             message: feedbackPrompt,
-            context: `IELTS ${skillType} test comprehensive feedback analysis with detailed explanations`
+            context: `IELTS ${skillType} comprehensive feedback analysis`
           }
         });
 
@@ -577,7 +503,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         try {
           feedback = JSON.parse(feedbackResponse.data.response);
           
-          // Ensure scores are properly formatted
+          // Ensure scores are properly formatted (rounded to nearest 0.5)
           feedback.overall_score = getDisplayScore(feedback.overall_score);
           Object.keys(feedback.category_scores).forEach(key => {
             feedback.category_scores[key] = getDisplayScore(feedback.category_scores[key]);
@@ -587,35 +513,38 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         }
       } catch (feedbackError) {
         console.warn('AI feedback generation failed, using fallback:', feedbackError);
-        // Fallback feedback based on skill type
         feedback = generateFallbackFeedback(skillType, responses);
       }
-
-      // Convert feedback to JSON-compatible format for database storage
-      const feedbackForStorage = {
-        overall_score: feedback.overall_score,
-        category_scores: feedback.category_scores,
-        strengths: feedback.strengths,
-        improvements: feedback.improvements,
-        detailed_feedback: feedback.detailed_feedback,
-        band_descriptors: feedback.band_descriptors
-      };
 
       // Update session with results
       const { error: updateError } = await supabase
         .from('ai_test_sessions')
         .update({
           user_responses: responses,
-          ai_feedback: feedbackForStorage,
+          ai_feedback: feedback,
           band_scores: feedback.category_scores,
           overall_band_score: feedback.overall_score,
-          completed_at: new Date().toISOString()
+          completed_at: new Date().toISOString(),
+          time_spent: timeSpent
         })
         .eq('id', sessionId);
 
       if (updateError) {
         console.error('Failed to save session results:', updateError);
       }
+
+      // Update test history
+      await supabase
+        .from('test_history')
+        .update({
+          user_responses: responses,
+          scores: feedback.category_scores,
+          feedback: feedback,
+          time_spent: timeSpent,
+          completed: true,
+          updated_at: new Date().toISOString()
+        })
+        .eq('session_id', sessionId);
 
       setAiFeedback(feedback);
       setShowResults(true);
@@ -628,7 +557,6 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
 
     } catch (error) {
       console.error('Error in feedback generation:', error);
-      // Use fallback feedback if all else fails
       const fallbackFeedback = generateFallbackFeedback(skillType, responses);
       setAiFeedback(fallbackFeedback);
       setShowResults(true);
@@ -645,15 +573,15 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
 
   const generateFallbackFeedback = (skill: string, responses: any): AIFeedback => {
     const skillCriteria = {
-      listening: ['Main Ideas', 'Supporting Details', 'Inference', 'Global Understanding'],
-      reading: ['Main Ideas', 'Supporting Details', 'Inference', 'Global Understanding'], 
-      writing: ['Task Achievement', 'Coherence and Cohesion', 'Lexical Resource', 'Grammatical Range'],
-      speaking: ['Fluency and Coherence', 'Lexical Resource', 'Grammatical Range', 'Pronunciation']
+      listening: ['main_ideas', 'supporting_details', 'inference', 'global_understanding'],
+      reading: ['main_ideas', 'supporting_details', 'inference', 'global_understanding'], 
+      writing: ['task_achievement', 'coherence_cohesion', 'lexical_resource', 'grammatical_range'],
+      speaking: ['fluency_coherence', 'lexical_resource', 'grammatical_range', 'pronunciation']
     };
 
     const criteria = skillCriteria[skill as keyof typeof skillCriteria];
     const scores = criteria.reduce((acc, criterion) => {
-      acc[criterion.toLowerCase().replace(/ /g, '_')] = getDisplayScore(6.5 + Math.random() * 1.5); // Random score between 6.5-8.0
+      acc[criterion] = getDisplayScore(6.0 + Math.random() * 2.0); // Random score between 6.0-8.0
       return acc;
     }, {} as { [key: string]: number });
 
@@ -663,29 +591,30 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
       overall_score: getDisplayScore(overallScore),
       category_scores: scores,
       strengths: [
-        "Demonstrates good understanding of main concepts and ideas",
-        "Shows clear communication of thoughts and responses", 
-        "Uses appropriate vocabulary for the context and topic",
-        "Maintains well-structured approach to answering questions",
-        "Displays competent handling of the test format and requirements"
+        "Demonstrates solid understanding of main concepts and key information",
+        "Shows clear communication and logical organization of ideas", 
+        "Uses appropriate vocabulary for the context and demonstrates good range",
+        "Maintains structured approach with good time management",
+        "Displays competent handling of test format and requirements"
       ],
       improvements: [
-        "Focus on improving accuracy in identifying specific details",
-        "Expand range of vocabulary to express ideas more precisely",
-        "Work on developing more complex grammatical structures",
-        "Practice time management to ensure complete responses",
-        "Enhance ability to make inferences from given information"
+        "Focus on improving accuracy in identifying specific details and nuances",
+        "Expand vocabulary range to express ideas more precisely and naturally",
+        "Work on developing more complex grammatical structures confidently",
+        "Practice time management to ensure complete and thorough responses",
+        "Enhance ability to make sophisticated inferences from given information"
       ],
-      detailed_feedback: `Your performance in this ${skill} test demonstrates solid competency with several areas of strength. You show good understanding of the material and communicate your ideas effectively. The response indicates familiarity with the test format and appropriate strategies. To achieve higher band scores, focus on the specific improvement areas mentioned above, particularly enhancing accuracy in details and expanding your linguistic range. Continue practicing with authentic IELTS materials to build confidence and refine your skills further.`,
+      detailed_feedback: `Your performance in this ${skill} test demonstrates solid competency with several notable strengths. You show good understanding of the material and communicate ideas effectively with appropriate strategies. The response indicates familiarity with test format and sound approach to the tasks. To achieve higher band scores, focus on the specific improvement areas mentioned above, particularly enhancing precision in details and expanding linguistic range. Continue practicing with authentic IELTS materials to build confidence and refine skills systematically.`,
       band_descriptors: criteria.reduce((acc, criterion) => {
-        const key = criterion.toLowerCase().replace(/ /g, '_');
-        acc[key] = `Shows good control with generally appropriate usage. Some minor errors occur but do not impede communication. Performance is consistent with Band ${scores[key]} level expectations.`;
+        const key = criterion;
+        acc[key] = `Shows good control with generally appropriate usage and effective communication. Minor errors occur but do not impede understanding. Performance demonstrates ${scores[key]} band level competency with room for development.`;
         return acc;
       }, {} as { [key: string]: string })
     };
   };
 
   const handleStartTest = () => {
+    setTestStartTime(new Date());
     setShowTest(true);
   };
 
@@ -723,14 +652,9 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
               </div>
             </div>
-            <h3 className="text-xl font-semibold mt-4 mb-2">
-              {usePreGenerated ? "Loading Pre-generated Test" : "Generating Your AI Test"}
-            </h3>
+            <h3 className="text-xl font-semibold mt-4 mb-2">Generating Your AI Test</h3>
             <p className="text-gray-600 text-center max-w-md">
-              {usePreGenerated 
-                ? `Loading a pre-generated ${skillType} test from our database...`
-                : `Our AI is creating a personalized ${skillType} test based on real IELTS exam patterns. This may take a moment...`
-              }
+              Our AI is creating a personalized {skillType} test based on real IELTS exam patterns. This may take a moment...
             </p>
             <div className="flex items-center mt-4 space-x-2">
               <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
@@ -761,7 +685,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
               </div>
               <div className="text-right">
                 <div className={`text-5xl font-bold ${getScoreColor(aiFeedback.overall_score)}`}>
-                  {getDisplayScore(aiFeedback.overall_score)}
+                  {Math.floor(aiFeedback.overall_score)}
                 </div>
                 <div className="text-sm text-green-600 font-medium">Overall Band Score</div>
               </div>
@@ -780,7 +704,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {Object.entries(aiFeedback.category_scores).map(([category, score]) => {
-                const displayScore = getDisplayScore(score);
+                const displayScore = Math.floor(score);
                 return (
                   <div key={category} className="bg-white border-2 border-gray-100 rounded-lg p-5 hover:shadow-md transition-shadow">
                     <div className="flex items-center justify-between mb-3">
@@ -870,10 +794,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         {/* Action Buttons */}
         <div className="flex justify-center space-x-4 pt-6">
           <Button 
-            onClick={() => {
-              setUsePreGenerated(false);
-              generateAITest();
-            }} 
+            onClick={generateAITest} 
             variant="outline" 
             size="lg" 
             className="px-8"
@@ -882,9 +803,12 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
             Generate New AI Test
           </Button>
           <Button 
-            onClick={() => {
-              setUsePreGenerated(true);
-              generateAITest();
+            onClick={async () => {
+              const loaded = await loadPreGeneratedTest();
+              if (loaded) {
+                setShowResults(false);
+                setShowTest(false);
+              }
             }} 
             variant="outline" 
             size="lg" 
@@ -976,21 +900,20 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
             <h3 className="font-semibold mb-3">Choose Test Type:</h3>
             <div className="flex flex-col sm:flex-row gap-3">
               <Button 
-                onClick={() => {
-                  setUsePreGenerated(false);
-                  handleStartTest();
-                }} 
+                onClick={handleStartTest} 
                 size="lg" 
                 className="bg-white text-gray-900 hover:bg-white/90 px-6 py-3 text-base font-semibold flex-1"
                 disabled={!testContent}
               >
                 <Brain className="h-5 w-5 mr-2" />
-                Fresh AI Generated Test
+                Start AI Test
               </Button>
               <Button 
-                onClick={() => {
-                  setUsePreGenerated(true);
-                  generateAITest();
+                onClick={async () => {
+                  const loaded = await loadPreGeneratedTest();
+                  if (loaded && testContent) {
+                    handleStartTest();
+                  }
                 }} 
                 size="lg" 
                 variant="outline"

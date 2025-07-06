@@ -54,6 +54,38 @@ export interface AITestSession {
   overall_band_score?: number;
   completed_at?: string;
   created_at: string;
+  started_at?: string;
+  time_spent?: number;
+}
+
+export interface TestHistory {
+  id: string;
+  user_id: string;
+  session_id?: string;
+  test_type: 'quick' | 'ai';
+  skill_type: string;
+  test_content?: any;
+  user_responses?: any;
+  scores?: any;
+  feedback?: any;
+  time_spent?: number;
+  completed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UserProgress {
+  id: string;
+  user_id: string;
+  skill_type: string;
+  total_tests: number;
+  total_time_spent: number;
+  best_score: number;
+  average_score: number;
+  last_test_date?: string;
+  streak_days: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ContentItem {
