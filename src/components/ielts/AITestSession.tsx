@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Brain, Clock, Trophy, BookOpen, Headphones, PenTool, Mic, CheckCircle, Star, TrendingUp, RefreshCw, Database, Shuffle } from 'lucide-react';
+import { Brain, Clock, Trophy, BookOpen, Headphones, PenTool, Mic, CheckCircle, Star, TrendingUp } from 'lucide-react';
 import ListeningTest from './ListeningTest';
 import ReadingTest from './ReadingTest';  
 import WritingTest from './WritingTest';
@@ -35,8 +35,6 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
   const [aiFeedback, setAiFeedback] = useState<AIFeedback | null>(null);
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
   const [testStartTime, setTestStartTime] = useState<Date | null>(null);
-  const [availableTests, setAvailableTests] = useState<any[]>([]);
-  const [currentTestIndex, setCurrentTestIndex] = useState(0);
 
   const skillIcons = {
     listening: <Headphones className="h-6 w-6" />,
@@ -79,194 +77,64 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
 
   useEffect(() => {
     if (user) {
-      loadAvailableTests();
+      loadPreGeneratedTest();
     }
   }, [skillType, user]);
 
-  const loadAvailableTests = async () => {
+  const loadPreGeneratedTest = async () => {
+    setIsLoading(true);
     try {
-      console.log(`Loading available ${skillType} tests from database`);
+      console.log(`Loading pre-generated ${skillType} test from database`);
       
       const { data: preGeneratedTests, error } = await supabase
         .from('ai_generated_tests')
         .select('*')
         .eq('skill_type', skillType)
         .eq('is_active', true)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(1);
 
       if (error) {
-        console.error('Error loading tests:', error);
-        setAvailableTests([]);
+        console.error('Error loading pre-generated test:', error);
+        await generateFallbackTest();
         return;
       }
 
       if (preGeneratedTests && preGeneratedTests.length > 0) {
-        console.log(`Found ${preGeneratedTests.length} pre-generated tests`);
-        setAvailableTests(preGeneratedTests);
-        // Set the first test as current
-        const firstTest = preGeneratedTests[0];
+        const test = preGeneratedTests[0];
+        console.log(`Found pre-generated test: ${test.topic}`);
         setTestContent({
-          id: firstTest.id,
-          content: firstTest.content,
-          topic: firstTest.topic || `${skillType} test`,
+          id: test.id,
+          content: test.content,
+          topic: test.topic || `${skillType} test`,
           isPreGenerated: true
         });
       } else {
-        console.log('No pre-generated tests found, will generate new one');
-        setAvailableTests([]);
+        console.log('No pre-generated tests found, creating fallback');
+        await generateFallbackTest();
       }
     } catch (error) {
-      console.error('Error in loadAvailableTests:', error);
-      setAvailableTests([]);
-    }
-  };
-
-  const selectRandomTest = async () => {
-    if (availableTests.length === 0) {
-      toast({
-        title: "No Tests Available",
-        description: "Generating a new AI test for you...",
-      });
-      await generateFreshAITest();
-      return;
-    }
-
-    // Select a random test from available tests
-    const randomIndex = Math.floor(Math.random() * availableTests.length);
-    const selectedTest = availableTests[randomIndex];
-    
-    setCurrentTestIndex(randomIndex);
-    setTestContent({
-      id: selectedTest.id,
-      content: selectedTest.content,
-      topic: selectedTest.topic || `${skillType} test`,
-      isPreGenerated: true
-    });
-
-    toast({
-      title: "Test Selected",
-      description: `Selected test: ${selectedTest.topic || 'Random test'}`,
-    });
-  };
-
-  const loadNextTest = async () => {
-    if (availableTests.length === 0) {
-      await generateFreshAITest();
-      return;
-    }
-
-    // Get next test in rotation
-    const nextIndex = (currentTestIndex + 1) % availableTests.length;
-    const nextTest = availableTests[nextIndex];
-    
-    setCurrentTestIndex(nextIndex);
-    setTestContent({
-      id: nextTest.id,
-      content: nextTest.content,
-      topic: nextTest.topic || `${skillType} test`,
-      isPreGenerated: true
-    });
-
-    toast({
-      title: "Next Test Loaded",
-      description: `Test: ${nextTest.topic || 'Practice test'}`,
-    });
-  };
-
-  const generateFreshAITest = async () => {
-    setIsLoading(true);
-    try {
-      console.log(`Generating fresh AI test for ${skillType}`);
-      
-      const response = await supabase.functions.invoke('gemini-chat', {
-        body: {
-          message: `Generate a comprehensive IELTS ${skillType} test with detailed questions and realistic content. Format the response as valid JSON.`,
-          skill: skillType,
-          generateContent: true
-        }
-      });
-
-      if (response.error) {
-        throw response.error;
-      }
-
-      let testData;
-      let topic = `AI Generated ${skillType} Test`;
-      
-      if (response.data && response.data.response) {
-        try {
-          testData = JSON.parse(response.data.response);
-          topic = response.data.topic || topic;
-        } catch (parseError) {
-          console.warn('Failed to parse AI response, using fallback');
-          testData = createFallbackTest(skillType).content;
-        }
-      } else {
-        testData = createFallbackTest(skillType).content;
-      }
-
-      // Store the new test in database
-      const { data: storedTest, error: storeError } = await supabase
-        .from('ai_generated_tests')
-        .insert({
-          skill_type: skillType,
-          content: testData,
-          topic: topic,
-          difficulty_level: 'intermediate'
-        })
-        .select()
-        .single();
-
-      if (!storeError && storedTest) {
-        setTestContent({
-          id: storedTest.id,
-          content: testData,
-          topic: storedTest.topic || topic,
-          isPreGenerated: false
-        });
-        
-        // Add to available tests
-        setAvailableTests(prev => [storedTest, ...prev]);
-      } else {
-        console.warn('Failed to store test, using local content');
-        const fallbackTest = createFallbackTest(skillType);
-        setTestContent({
-          id: fallbackTest.id,
-          content: fallbackTest.content,
-          topic: fallbackTest.topic,
-          isPreGenerated: false
-        });
-      }
-
-      toast({
-        title: "New Test Generated",
-        description: `Fresh ${skillType} test created successfully!`
-      });
-
-    } catch (error) {
-      console.error('Error generating AI test:', error);
-      const fallbackTest = createFallbackTest(skillType);
-      setTestContent({
-        id: fallbackTest.id,
-        content: fallbackTest.content,
-        topic: fallbackTest.topic,
-        isPreGenerated: false
-      });
-      
-      toast({
-        title: "Test Ready",
-        description: `${skillType} test ready (using backup content)`,
-        variant: "destructive"
-      });
+      console.error('Error in loadPreGeneratedTest:', error);
+      await generateFallbackTest();
     } finally {
       setIsLoading(false);
     }
   };
 
-  const createFallbackTest = (skill: string) => {
+  const generateFallbackTest = async () => {
+    console.log(`Creating fallback test for ${skillType}`);
+    const fallbackTest = createFallbackTestContent(skillType);
+    setTestContent({
+      id: `fallback-${skillType}`,
+      content: fallbackTest.content,
+      topic: fallbackTest.topic,
+      isPreGenerated: false
+    });
+  };
+
+  const createFallbackTestContent = (skill: string) => {
     const fallbackTests = {
       listening: {
-        skill_type: skill,
         content: {
           title: "University Library Services",
           transcript: "Welcome to the university library orientation. My name is Sarah, and I'll be showing you around today. The library is open from 8 AM to 10 PM Monday through Friday, and 9 AM to 6 PM on weekends. We have five floors in total. The ground floor contains the reception desk, computer terminals, and the café. The first floor has our fiction and general reading collection. The second floor is dedicated to academic texts and reference materials. The third floor houses our special collections and archives. The fourth floor is our quiet study area with individual study booths. To borrow books, you'll need your student ID card. Undergraduate students can borrow up to 10 books for 3 weeks, while graduate students can borrow up to 15 books for 6 weeks. There's a fine of 50 cents per day for overdue books. We also offer printing services at 10 cents per page for black and white, and 25 cents for color printing. The library provides free Wi-Fi throughout the building. If you need help finding resources, our librarians are available at the help desk on the ground floor from 9 AM to 5 PM daily.",
@@ -290,30 +158,15 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
               question: "How many books can graduate students borrow?",
               options: ["10 books", "15 books", "20 books", "12 books"],
               correctAnswer: "15 books"
-            },
-            {
-              id: 4,
-              type: "fill_blank",
-              question: "The fine for overdue books is ________ cents per day.",
-              correctAnswer: "50"
-            },
-            {
-              id: 5,
-              type: "multiple_choice",
-              question: "Where is the quiet study area located?",
-              options: ["Ground floor", "First floor", "Third floor", "Fourth floor"],
-              correctAnswer: "Fourth floor"
             }
           ]
         },
-        topic: "University Library Services",
-        id: 'fallback-listening'
+        topic: "University Library Services"
       },
       reading: {
-        skill_type: skill,
         content: {
           title: "The Impact of Artificial Intelligence on Modern Healthcare",
-          passage: "Artificial Intelligence (AI) is revolutionizing healthcare in unprecedented ways, transforming how medical professionals diagnose, treat, and prevent diseases. The integration of AI technologies in healthcare systems worldwide has shown remarkable potential to improve patient outcomes while reducing costs and increasing efficiency.\n\nOne of the most significant applications of AI in healthcare is in medical imaging and diagnostics. Machine learning algorithms can now analyze medical images such as X-rays, MRIs, and CT scans with accuracy that often surpasses human radiologists. For instance, AI systems have demonstrated the ability to detect early-stage cancers in mammograms and identify diabetic retinopathy in eye scans with remarkable precision. This capability not only speeds up the diagnostic process but also helps catch diseases in their early stages when treatment is most effective.\n\nAI is also making substantial contributions to drug discovery and development. Traditional pharmaceutical research can take decades and cost billions of dollars to bring a new drug to market. AI algorithms can analyze vast databases of molecular information to identify potential drug compounds, predict their effectiveness, and anticipate possible side effects. This process significantly reduces the time and cost associated with drug development, potentially bringing life-saving medications to patients faster than ever before.\n\nPersonalized medicine represents another frontier where AI is making significant strides. By analyzing individual patient data, including genetic information, medical history, and lifestyle factors, AI systems can help doctors create tailored treatment plans that are more likely to be effective for specific patients. This approach moves away from the traditional 'one-size-fits-all' model of medicine toward more precise, individualized care.\n\nHowever, the implementation of AI in healthcare is not without challenges. Privacy and security concerns are paramount, as AI systems require access to vast amounts of sensitive patient data. Ensuring this information remains protected while still allowing AI systems to function effectively requires robust cybersecurity measures and strict regulatory compliance. Additionally, there are concerns about the potential for AI to replace human healthcare workers, though most experts believe AI will augment rather than replace human expertise in medicine.",
+          passage: "Artificial Intelligence (AI) is revolutionizing healthcare in unprecedented ways, transforming how medical professionals diagnose, treat, and prevent diseases. The integration of AI technologies in healthcare systems worldwide has shown remarkable potential to improve patient outcomes while reducing costs and increasing efficiency.\n\nOne of the most significant applications of AI in healthcare is in medical imaging and diagnostics. Machine learning algorithms can now analyze medical images such as X-rays, MRIs, and CT scans with accuracy that often surpasses human radiologists. For instance, AI systems have demonstrated the ability to detect early-stage cancers in mammograms and identify diabetic retinopathy in eye scans with remarkable precision. This capability not only speeds up the diagnostic process but also helps catch diseases in their early stages when treatment is most effective.\n\nAI is also making substantial contributions to drug discovery and development. Traditional pharmaceutical research can take decades and cost billions of dollars to bring a new drug to market. AI algorithms can analyze vast databases of molecular information to identify potential drug compounds, predict their effectiveness, and anticipate possible side effects. This process significantly reduces the time and cost associated with drug development, potentially bringing life-saving medications to patients faster than ever before.",
           questions: [
             {
               id: 1,
@@ -332,32 +185,12 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
                 "Guarantee success of new medications"
               ],
               correctAnswer: "Reduce time and cost of drug development"
-            },
-            {
-              id: 3,
-              type: "true_false_not_given",
-              question: "Personalized medicine using AI considers only genetic information.",
-              correctAnswer: "False"
-            },
-            {
-              id: 4,
-              type: "summary_completion",
-              question: "The main challenge in implementing AI in healthcare is ensuring ________ and security of patient data.",
-              correctAnswer: "privacy"
-            },
-            {
-              id: 5,
-              type: "true_false_not_given",
-              question: "Most experts believe AI will completely replace human healthcare workers.",
-              correctAnswer: "False"
             }
           ]
         },
-        topic: "AI in Healthcare",
-        id: 'fallback-reading'
+        topic: "AI in Healthcare"
       },
       writing: {
-        skill_type: skill,
         content: {
           title: "IELTS Writing Test",
           task1: {
@@ -371,11 +204,9 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
             wordCount: 250
           }
         },
-        topic: "Education and Career Choices",
-        id: 'fallback-writing'
+        topic: "Education and Career Choices"
       },
       speaking: {
-        skill_type: skill,
         content: {
           title: "IELTS Speaking Test",
           part1: [
@@ -397,8 +228,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
             "How do you think reading habits will change in the future?"
           ]
         },
-        topic: "Books and Reading",
-        id: 'fallback-speaking'
+        topic: "Books and Reading"
       }
     };
 
@@ -616,8 +446,8 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
   const handleStartTest = async () => {
     if (!testContent) {
       toast({
-        title: "No Test Selected",
-        description: "Please select a test first.",
+        title: "No Test Available",
+        description: "Please wait while we load a test for you.",
         variant: "destructive"
       });
       return;
@@ -687,15 +517,10 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
               </div>
             </div>
-            <h3 className="text-xl font-semibold mt-4 mb-2">Generating Your AI Test</h3>
+            <h3 className="text-xl font-semibold mt-4 mb-2">Loading Your Test</h3>
             <p className="text-gray-600 text-center max-w-md">
-              Our AI is creating a personalized {skillType} test based on real IELTS exam patterns. This may take a moment...
+              Loading a pre-generated {skillType} test for you...
             </p>
-            <div className="flex items-center mt-4 space-x-2">
-              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-              <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -828,33 +653,6 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
 
         {/* Action Buttons */}
         <div className="flex justify-center space-x-4 pt-6">
-          <Button 
-            onClick={loadNextTest} 
-            variant="outline" 
-            size="lg" 
-            className="px-8"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Next Test
-          </Button>
-          <Button 
-            onClick={selectRandomTest} 
-            variant="outline" 
-            size="lg" 
-            className="px-8"
-          >
-            <Shuffle className="h-4 w-4 mr-2" />
-            Random Test
-          </Button>
-          <Button 
-            onClick={generateFreshAITest} 
-            variant="outline" 
-            size="lg" 
-            className="px-8"
-          >
-            <Brain className="h-4 w-4 mr-2" />
-            Generate New
-          </Button>
           <Button onClick={onBack} size="lg" className="px-8">
             Back to Skills
           </Button>
@@ -896,92 +694,52 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
                 {skillIcons[skillType as keyof typeof skillIcons]}
               </div>
               <div>
-                <CardTitle className="text-2xl">AI-Generated {skillType.charAt(0).toUpperCase() + skillType.slice(1)} Test</CardTitle>
-                <p className="text-white/90">Smart test selection with consistent content</p>
+                <CardTitle className="text-2xl">AI {skillType.charAt(0).toUpperCase() + skillType.slice(1)} Test</CardTitle>
+                <p className="text-white/90">Professional IELTS test with AI feedback</p>
               </div>
             </div>
             <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
-              AI Powered
+              Ready to Start
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
           {testContent && (
             <div className="bg-white/10 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">
-                Current Test: {testContent.topic}
-                {testContent.isPreGenerated && (
-                  <Badge variant="secondary" className="ml-2 bg-green-500/20 text-white">
-                    Pre-generated
-                  </Badge>
-                )}
-              </h3>
+              <h3 className="font-semibold mb-2">Test Topic: {testContent.topic}</h3>
               <p className="text-white/90 text-sm">
-                Available tests: {availableTests.length} | 
-                {testContent.isPreGenerated ? ' Using curated content' : ' Freshly generated'}
+                {testContent.isPreGenerated ? 'Using curated test content' : 'Using standard test content'}
               </p>
             </div>
           )}
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white/10 rounded-lg p-4 text-center">
-              <Database className="h-8 w-8 mx-auto mb-2" />
-              <div className="font-semibold">Smart Selection</div>
-              <div className="text-sm text-white/80">Consistent test rotation</div>
-            </div>
-            <div className="bg-white/10 rounded-lg p-4 text-center">
               <Clock className="h-8 w-8 mx-auto mb-2" />
               <div className="font-semibold">Real IELTS Format</div>
               <div className="text-sm text-white/80">Authentic test structure</div>
             </div>
             <div className="bg-white/10 rounded-lg p-4 text-center">
+              <Brain className="h-8 w-8 mx-auto mb-2" />
+              <div className="font-semibold">AI Feedback</div>
+              <div className="text-sm text-white/80">Detailed scoring analysis</div>
+            </div>
+            <div className="bg-white/10 rounded-lg p-4 text-center">
               <Trophy className="h-8 w-8 mx-auto mb-2" />
-              <div className="font-semibold">Detailed Feedback</div>
-              <div className="text-sm text-white/80">All IELTS criteria covered</div>
+              <div className="font-semibold">Band Scores</div>
+              <div className="text-sm text-white/80">Official IELTS criteria</div>
             </div>
           </div>
 
-          {/* Test Selection Options */}
-          <div className="bg-white/10 rounded-lg p-4">
-            <h3 className="font-semibold mb-3">Choose Test Option:</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <Button 
-                onClick={handleStartTest} 
-                size="lg" 
-                className="bg-white text-gray-900 hover:bg-white/90 font-semibold"
-                disabled={!testContent}
-              >
-                <Database className="h-4 w-4 mr-2" />
-                Start Current
-              </Button>
-              <Button 
-                onClick={loadNextTest} 
-                size="lg" 
-                variant="outline"
-                className="border-white/30 text-white hover:bg-white/10 font-semibold"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Next Test
-              </Button>
-              <Button 
-                onClick={selectRandomTest} 
-                size="lg" 
-                variant="outline"
-                className="border-white/30 text-white hover:bg-white/10 font-semibold"
-              >
-                <Shuffle className="h-4 w-4 mr-2" />
-                Random
-              </Button>
-              <Button 
-                onClick={generateFreshAITest} 
-                size="lg" 
-                variant="outline"
-                className="border-white/30 text-white hover:bg-white/10 font-semibold"
-              >
-                <Brain className="h-4 w-4 mr-2" />
-                Generate New
-              </Button>
-            </div>
+          <div className="flex justify-center pt-4">
+            <Button 
+              onClick={handleStartTest} 
+              size="lg" 
+              className="bg-white text-gray-900 hover:bg-white/90 font-semibold px-8"
+              disabled={!testContent}
+            >
+              Start AI Test
+            </Button>
           </div>
         </CardContent>
       </Card>
