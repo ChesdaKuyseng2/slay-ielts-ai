@@ -108,3 +108,33 @@ export interface SystemSetting {
   updated_by?: string;
   updated_at: string;
 }
+
+export interface AIFeedback {
+  overall_score: number;
+  category_scores: {
+    [key: string]: number;
+  };
+  strengths: string[];
+  improvements: string[];
+  detailed_feedback: string;
+  band_descriptors: {
+    [key: string]: string;
+  };
+}
+
+// RPC Function Parameters
+export interface InsertTestHistoryParams {
+  p_user_id: string;
+  p_session_id: string;
+  p_test_type: string;
+  p_skill_type: string;
+  p_test_content: any;
+}
+
+export interface UpdateTestHistoryParams {
+  p_session_id: string;
+  p_user_responses: any;
+  p_scores: any;
+  p_feedback: any;
+  p_time_spent: number;
+}

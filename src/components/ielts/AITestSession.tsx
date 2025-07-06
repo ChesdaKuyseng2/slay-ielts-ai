@@ -10,6 +10,7 @@ import ListeningTest from './ListeningTest';
 import ReadingTest from './ReadingTest';  
 import WritingTest from './WritingTest';
 import SpeakingTest from './SpeakingTest';
+import { AIFeedback } from '@/types/database';
 
 interface AITestSessionProps {
   skillType: string;
@@ -20,19 +21,6 @@ interface TestContent {
   id: string;
   content: any;
   topic: string;
-}
-
-interface AIFeedback {
-  overall_score: number;
-  category_scores: {
-    [key: string]: number;
-  };
-  strengths: string[];
-  improvements: string[];
-  detailed_feedback: string;
-  band_descriptors: {
-    [key: string]: string;
-  };
 }
 
 const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
@@ -92,6 +80,61 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
     }
   }, [skillType, user]);
 
+  const insertTestHistory = async (userId: string, sessionId: string, testType: string, skillType: string, testContent: any) => {
+    try {
+      // Try using RPC first
+      const { error: rpcError } = await supabase.rpc('insert_test_history', {
+        p_user_id: userId,
+        p_session_id: sessionId,
+        p_test_type: testType,
+        p_skill_type: skillType,
+        p_test_content: testContent
+      });
+      
+      if (!rpcError) return;
+      
+      // Fallback to direct insert if RPC fails
+      console.warn('RPC failed, using direct insert:', rpcError);
+      await supabase.from('test_history').insert({
+        user_id: userId,
+        session_id: sessionId,
+        test_type: testType,
+        skill_type: skillType,
+        test_content: testContent
+      });
+    } catch (error) {
+      console.warn('Failed to track test history:', error);
+    }
+  };
+
+  const updateTestHistory = async (sessionId: string, userResponses: any, scores: any, feedback: any, timeSpent: number) => {
+    try {
+      // Try using RPC first
+      const { error: rpcError } = await supabase.rpc('update_test_history', {
+        p_session_id: sessionId,
+        p_user_responses: userResponses,
+        p_scores: scores,
+        p_feedback: feedback,
+        p_time_spent: timeSpent
+      });
+      
+      if (!rpcError) return;
+      
+      // Fallback to direct update if RPC fails
+      console.warn('RPC failed, using direct update:', rpcError);
+      await supabase.from('test_history').update({
+        user_responses: userResponses,
+        scores: scores,
+        feedback: feedback,
+        time_spent: timeSpent,
+        completed: true,
+        updated_at: new Date().toISOString()
+      }).eq('session_id', sessionId);
+    } catch (error) {
+      console.warn('Failed to update test history:', error);
+    }
+  };
+
   const loadPreGeneratedTest = async (): Promise<boolean> => {
     try {
       console.log(`Loading pre-generated ${skillType} test from database`);
@@ -132,18 +175,8 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         if (!sessionError && session) {
           setSessionId(session.id);
           
-          // Track in history - use raw SQL for now since types might not be updated
-          try {
-            await supabase.rpc('insert_test_history', {
-              p_user_id: user!.id,
-              p_session_id: session.id,
-              p_test_type: 'ai',
-              p_skill_type: skillType,
-              p_test_content: selectedTest.content
-            });
-          } catch (historyError) {
-            console.warn('Failed to track in history:', historyError);
-          }
+          // Track in history
+          await insertTestHistory(user!.id, session.id, 'ai', skillType, selectedTest.content);
         }
 
         toast({
@@ -399,18 +432,8 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
       if (!sessionError && session) {
         setSessionId(session.id);
         
-        // Track in history - use raw SQL for now
-        try {
-          await supabase.rpc('insert_test_history', {
-            p_user_id: user.id,
-            p_session_id: session.id,
-            p_test_type: 'ai',
-            p_skill_type: skillType,
-            p_test_content: testData
-          });
-        } catch (historyError) {
-          console.warn('Failed to track in history:', historyError);
-        }
+        // Track in history
+        await insertTestHistory(user.id, session.id, 'ai', skillType, testData);
       }
       
       toast({
@@ -539,18 +562,8 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         console.error('Failed to save session results:', updateError);
       }
 
-      // Update test history - use raw SQL for now
-      try {
-        await supabase.rpc('update_test_history', {
-          p_session_id: sessionId,
-          p_user_responses: responses,
-          p_scores: feedback.category_scores,
-          p_feedback: feedbackAsJson,
-          p_time_spent: timeSpent
-        });
-      } catch (historyError) {
-        console.warn('Failed to update test history:', historyError);
-      }
+      // Update test history
+      await updateTestHistory(sessionId, responses, feedback.category_scores, feedbackAsJson, timeSpent);
 
       setAiFeedback(feedback);
       setShowResults(true);
