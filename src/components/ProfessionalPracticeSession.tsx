@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Clock, BookOpen, Headphones, Mic, PenTool, Trophy, Star, CheckCircle, XCircle, Play, Pause, Volume2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { AnswerExplanation } from './ielts/AnswerExplanation';
+import AnswerExplanation from './ielts/AnswerExplanation';
 
 interface PracticeSessionProps {
   skill: string;
@@ -21,6 +22,8 @@ interface Question {
   options: string[];
   correctAnswer: string;
   explanation: string;
+  type?: string;
+  audioUrl?: string;
 }
 
 interface Feedback {
@@ -76,7 +79,7 @@ const ProfessionalPracticeSession: React.FC<PracticeSessionProps> = ({ skill, du
       setIsLoading(true);
       try {
         const preGeneratedContent = await loadPreGeneratedContent(skill);
-        if (preGeneratedContent) {
+        if (preGeneratedContent && typeof preGeneratedContent === 'object' && 'questions' in preGeneratedContent) {
           setContent(preGeneratedContent);
           setQuestions(preGeneratedContent.questions || []);
         } else {
@@ -283,7 +286,14 @@ const ProfessionalPracticeSession: React.FC<PracticeSessionProps> = ({ skill, du
         </div>
 
         {feedback && (
-          <AnswerExplanation isCorrect={feedback.isCorrect} explanation={feedback.explanation} />
+          <AnswerExplanation 
+            question={currentQuestion}
+            userAnswer={userAnswers[currentQuestionIndex]}
+            correctAnswer={currentQuestion.correctAnswer}
+            isCorrect={feedback.isCorrect} 
+            skillType={skill}
+            questionIndex={currentQuestionIndex}
+          />
         )}
       </CardContent>
     </Card>

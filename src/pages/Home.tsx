@@ -1,9 +1,8 @@
-
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Check, Star, Users, BookOpen, Award, Globe, Sparkles } from 'lucide-react';
+import { Check, Star, Users, BookOpen, Award, Globe, Sparkles, Play, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 const Home = () => {
