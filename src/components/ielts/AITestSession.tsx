@@ -132,16 +132,18 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         if (!sessionError && session) {
           setSessionId(session.id);
           
-          // Track in history
-          await supabase
-            .from('test_history')
-            .insert({
-              user_id: user!.id,
-              session_id: session.id,
-              test_type: 'ai',
-              skill_type: skillType,
-              test_content: selectedTest.content
+          // Track in history - use raw SQL for now since types might not be updated
+          try {
+            await supabase.rpc('insert_test_history', {
+              p_user_id: user!.id,
+              p_session_id: session.id,
+              p_test_type: 'ai',
+              p_skill_type: skillType,
+              p_test_content: selectedTest.content
             });
+          } catch (historyError) {
+            console.warn('Failed to track in history:', historyError);
+          }
         }
 
         toast({
@@ -397,16 +399,18 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
       if (!sessionError && session) {
         setSessionId(session.id);
         
-        // Track in history
-        await supabase
-          .from('test_history')
-          .insert({
-            user_id: user.id,
-            session_id: session.id,
-            test_type: 'ai',
-            skill_type: skillType,
-            test_content: testData
+        // Track in history - use raw SQL for now
+        try {
+          await supabase.rpc('insert_test_history', {
+            p_user_id: user.id,
+            p_session_id: session.id,
+            p_test_type: 'ai',
+            p_skill_type: skillType,
+            p_test_content: testData
           });
+        } catch (historyError) {
+          console.warn('Failed to track in history:', historyError);
+        }
       }
       
       toast({
@@ -516,12 +520,14 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         feedback = generateFallbackFeedback(skillType, responses);
       }
 
-      // Update session with results
+      // Update session with results - cast feedback to Json compatible type
+      const feedbackAsJson = JSON.parse(JSON.stringify(feedback));
+      
       const { error: updateError } = await supabase
         .from('ai_test_sessions')
         .update({
           user_responses: responses,
-          ai_feedback: feedback,
+          ai_feedback: feedbackAsJson,
           band_scores: feedback.category_scores,
           overall_band_score: feedback.overall_score,
           completed_at: new Date().toISOString(),
@@ -533,18 +539,18 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         console.error('Failed to save session results:', updateError);
       }
 
-      // Update test history
-      await supabase
-        .from('test_history')
-        .update({
-          user_responses: responses,
-          scores: feedback.category_scores,
-          feedback: feedback,
-          time_spent: timeSpent,
-          completed: true,
-          updated_at: new Date().toISOString()
-        })
-        .eq('session_id', sessionId);
+      // Update test history - use raw SQL for now
+      try {
+        await supabase.rpc('update_test_history', {
+          p_session_id: sessionId,
+          p_user_responses: responses,
+          p_scores: feedback.category_scores,
+          p_feedback: feedbackAsJson,
+          p_time_spent: timeSpent
+        });
+      } catch (historyError) {
+        console.warn('Failed to update test history:', historyError);
+      }
 
       setAiFeedback(feedback);
       setShowResults(true);
@@ -552,7 +558,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
 
       toast({
         title: "Test Completed!",
-        description: `Your overall band score: ${feedback.overall_score}/9`
+        description: `Your overall band score: ${Math.floor(feedback.overall_score)}/9`
       });
 
     } catch (error) {
