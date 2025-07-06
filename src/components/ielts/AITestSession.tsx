@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Brain, Clock, Trophy, BookOpen, Headphones, PenTool, Mic, CheckCircle, Star, TrendingUp, RefreshCw, Database } from 'lucide-react';
+import { Brain, Clock, Trophy, BookOpen, Headphones, PenTool, Mic, CheckCircle, Star, TrendingUp, RefreshCw, Database, Shuffle } from 'lucide-react';
 import ListeningTest from './ListeningTest';
 import ReadingTest from './ReadingTest';  
 import WritingTest from './WritingTest';
@@ -21,6 +21,7 @@ interface TestContent {
   id: string;
   content: any;
   topic: string;
+  isPreGenerated?: boolean;
 }
 
 const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
@@ -34,6 +35,8 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
   const [aiFeedback, setAiFeedback] = useState<AIFeedback | null>(null);
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
   const [testStartTime, setTestStartTime] = useState<Date | null>(null);
+  const [availableTests, setAvailableTests] = useState<any[]>([]);
+  const [currentTestIndex, setCurrentTestIndex] = useState(0);
 
   const skillIcons = {
     listening: <Headphones className="h-6 w-6" />,
@@ -76,101 +79,187 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
 
   useEffect(() => {
     if (user) {
-      generateAITest();
+      loadAvailableTests();
     }
   }, [skillType, user]);
 
-  const insertTestHistory = async (userId: string, sessionId: string, testType: string, skillType: string, testContent: any) => {
+  const loadAvailableTests = async () => {
     try {
-      const { error: rpcError } = await supabase.rpc('insert_test_history', {
-        p_user_id: userId,
-        p_session_id: sessionId,
-        p_test_type: testType,
-        p_skill_type: skillType,
-        p_test_content: testContent
-      });
-      
-      if (rpcError) {
-        console.warn('RPC insert_test_history failed:', rpcError);
-      }
-    } catch (error) {
-      console.warn('Failed to track test history:', error);
-    }
-  };
-
-  const updateTestHistory = async (sessionId: string, userResponses: any, scores: any, feedback: any, timeSpent: number) => {
-    try {
-      const { error: rpcError } = await supabase.rpc('update_test_history', {
-        p_session_id: sessionId,
-        p_user_responses: userResponses,
-        p_scores: scores,
-        p_feedback: feedback,
-        p_time_spent: timeSpent
-      });
-      
-      if (rpcError) {
-        console.warn('RPC update_test_history failed:', rpcError);
-      }
-    } catch (error) {
-      console.warn('Failed to update test history:', error);
-    }
-  };
-
-  const loadPreGeneratedTest = async (): Promise<boolean> => {
-    try {
-      console.log(`Loading pre-generated ${skillType} test from database`);
+      console.log(`Loading available ${skillType} tests from database`);
       
       const { data: preGeneratedTests, error } = await supabase
         .from('ai_generated_tests')
         .select('*')
         .eq('skill_type', skillType)
         .eq('is_active', true)
-        .order('created_at', { ascending: false })
-        .limit(1);
+        .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error loading pre-generated test:', error);
-        return false;
+        console.error('Error loading tests:', error);
+        setAvailableTests([]);
+        return;
       }
 
       if (preGeneratedTests && preGeneratedTests.length > 0) {
-        const selectedTest = preGeneratedTests[0];
+        console.log(`Found ${preGeneratedTests.length} pre-generated tests`);
+        setAvailableTests(preGeneratedTests);
+        // Set the first test as current
+        const firstTest = preGeneratedTests[0];
         setTestContent({
-          id: selectedTest.id,
-          content: selectedTest.content,
-          topic: selectedTest.topic || `Pre-generated ${skillType} test`
+          id: firstTest.id,
+          content: firstTest.content,
+          topic: firstTest.topic || `${skillType} test`,
+          isPreGenerated: true
         });
+      } else {
+        console.log('No pre-generated tests found, will generate new one');
+        setAvailableTests([]);
+      }
+    } catch (error) {
+      console.error('Error in loadAvailableTests:', error);
+      setAvailableTests([]);
+    }
+  };
 
-        // Create test session
-        const { data: session, error: sessionError } = await supabase
-          .from('ai_test_sessions')
-          .insert({
-            user_id: user!.id,
-            test_id: selectedTest.id,
-            skill_type: skillType,
-            started_at: new Date().toISOString()
-          })
-          .select()
-          .single();
+  const selectRandomTest = async () => {
+    if (availableTests.length === 0) {
+      toast({
+        title: "No Tests Available",
+        description: "Generating a new AI test for you...",
+      });
+      await generateFreshAITest();
+      return;
+    }
 
-        if (!sessionError && session) {
-          setSessionId(session.id);
-          
-          // Track in history
-          await insertTestHistory(user!.id, session.id, 'ai', skillType, selectedTest.content);
+    // Select a random test from available tests
+    const randomIndex = Math.floor(Math.random() * availableTests.length);
+    const selectedTest = availableTests[randomIndex];
+    
+    setCurrentTestIndex(randomIndex);
+    setTestContent({
+      id: selectedTest.id,
+      content: selectedTest.content,
+      topic: selectedTest.topic || `${skillType} test`,
+      isPreGenerated: true
+    });
+
+    toast({
+      title: "Test Selected",
+      description: `Selected test: ${selectedTest.topic || 'Random test'}`,
+    });
+  };
+
+  const loadNextTest = async () => {
+    if (availableTests.length === 0) {
+      await generateFreshAITest();
+      return;
+    }
+
+    // Get next test in rotation
+    const nextIndex = (currentTestIndex + 1) % availableTests.length;
+    const nextTest = availableTests[nextIndex];
+    
+    setCurrentTestIndex(nextIndex);
+    setTestContent({
+      id: nextTest.id,
+      content: nextTest.content,
+      topic: nextTest.topic || `${skillType} test`,
+      isPreGenerated: true
+    });
+
+    toast({
+      title: "Next Test Loaded",
+      description: `Test: ${nextTest.topic || 'Practice test'}`,
+    });
+  };
+
+  const generateFreshAITest = async () => {
+    setIsLoading(true);
+    try {
+      console.log(`Generating fresh AI test for ${skillType}`);
+      
+      const response = await supabase.functions.invoke('gemini-chat', {
+        body: {
+          message: `Generate a comprehensive IELTS ${skillType} test with detailed questions and realistic content. Format the response as valid JSON.`,
+          skill: skillType,
+          generateContent: true
         }
+      });
 
-        toast({
-          title: "Pre-generated Test Loaded",
-          description: `Your ${skillType} test is ready from our database!`
+      if (response.error) {
+        throw response.error;
+      }
+
+      let testData;
+      let topic = `AI Generated ${skillType} Test`;
+      
+      if (response.data && response.data.response) {
+        try {
+          testData = JSON.parse(response.data.response);
+          topic = response.data.topic || topic;
+        } catch (parseError) {
+          console.warn('Failed to parse AI response, using fallback');
+          testData = createFallbackTest(skillType).content;
+        }
+      } else {
+        testData = createFallbackTest(skillType).content;
+      }
+
+      // Store the new test in database
+      const { data: storedTest, error: storeError } = await supabase
+        .from('ai_generated_tests')
+        .insert({
+          skill_type: skillType,
+          content: testData,
+          topic: topic,
+          difficulty_level: 'intermediate'
+        })
+        .select()
+        .single();
+
+      if (!storeError && storedTest) {
+        setTestContent({
+          id: storedTest.id,
+          content: testData,
+          topic: storedTest.topic || topic,
+          isPreGenerated: false
         });
         
-        return true;
+        // Add to available tests
+        setAvailableTests(prev => [storedTest, ...prev]);
+      } else {
+        console.warn('Failed to store test, using local content');
+        const fallbackTest = createFallbackTest(skillType);
+        setTestContent({
+          id: fallbackTest.id,
+          content: fallbackTest.content,
+          topic: fallbackTest.topic,
+          isPreGenerated: false
+        });
       }
-      return false;
+
+      toast({
+        title: "New Test Generated",
+        description: `Fresh ${skillType} test created successfully!`
+      });
+
     } catch (error) {
-      console.error('Error loading pre-generated test:', error);
-      return false;
+      console.error('Error generating AI test:', error);
+      const fallbackTest = createFallbackTest(skillType);
+      setTestContent({
+        id: fallbackTest.id,
+        content: fallbackTest.content,
+        topic: fallbackTest.topic,
+        isPreGenerated: false
+      });
+      
+      toast({
+        title: "Test Ready",
+        description: `${skillType} test ready (using backup content)`,
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -316,128 +405,39 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
     return fallbackTests[skill as keyof typeof fallbackTests];
   };
 
-  const generateAITest = async () => {
-    if (!user) return;
-    
-    setIsLoading(true);
+  const insertTestHistory = async (userId: string, sessionId: string, testType: string, skillType: string, testContent: any) => {
     try {
-      console.log(`Generating AI test for ${skillType}`);
-      
-      // First, try to generate fresh content with Gemini API
-      let testData;
-      let topic = `AI Generated ${skillType} Test`;
-      
-      try {
-        const response = await supabase.functions.invoke('gemini-chat', {
-          body: {
-            message: `Generate a comprehensive IELTS ${skillType} test with detailed questions and realistic content. Format the response as valid JSON.`,
-            skill: skillType,
-            generateContent: true
-          }
-        });
-
-        if (response.error) {
-          throw response.error;
-        }
-
-        if (response.data && response.data.response) {
-          try {
-            testData = JSON.parse(response.data.response);
-            topic = response.data.topic || topic;
-          } catch (parseError) {
-            console.warn('Failed to parse AI response, using fallback');
-            throw parseError;
-          }
-        } else {
-          throw new Error('No response data from AI');
-        }
-      } catch (apiError) {
-        console.warn('AI generation failed, trying pre-generated test:', apiError);
-        
-        // Try to load pre-generated test as fallback
-        const preGenLoaded = await loadPreGeneratedTest();
-        if (preGenLoaded) {
-          setIsLoading(false);
-          return;
-        }
-        
-        // Final fallback to hardcoded test
-        const fallbackTest = createFallbackTest(skillType);
-        testData = fallbackTest.content;
-        topic = fallbackTest.topic;
-      }
-
-      // Store the test in database
-      const { data: storedTest, error: storeError } = await supabase
-        .from('ai_generated_tests')
-        .insert({
-          skill_type: skillType,
-          content: testData,
-          topic: topic,
-          difficulty_level: 'intermediate'
-        })
-        .select()
-        .single();
-
-      let finalTestId = null;
-      if (!storeError && storedTest) {
-        finalTestId = storedTest.id;
-        setTestContent({
-          id: storedTest.id,
-          content: testData,
-          topic: storedTest.topic || topic
-        });
-      } else {
-        console.warn('Failed to store test, using local content:', storeError);
-        // Use fallback test directly
-        const fallbackTest = createFallbackTest(skillType);
-        setTestContent({
-          id: fallbackTest.id,
-          content: fallbackTest.content,
-          topic: fallbackTest.topic
-        });
-      }
-
-      // Create test session
-      const { data: session, error: sessionError } = await supabase
-        .from('ai_test_sessions')
-        .insert({
-          user_id: user.id,
-          test_id: finalTestId,
-          skill_type: skillType,
-          started_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (!sessionError && session) {
-        setSessionId(session.id);
-        
-        // Track in history
-        await insertTestHistory(user.id, session.id, 'ai', skillType, testData);
-      }
-      
-      toast({
-        title: "AI Test Ready",
-        description: `Your personalized ${skillType} test is ready!`
+      const { error: rpcError } = await supabase.rpc('insert_test_history', {
+        p_user_id: userId,
+        p_session_id: sessionId,
+        p_test_type: testType,
+        p_skill_type: skillType,
+        p_test_content: testContent
       });
-
+      
+      if (rpcError) {
+        console.warn('RPC insert_test_history failed:', rpcError);
+      }
     } catch (error) {
-      console.error('Error in test generation process:', error);
-      // Final fallback - use hardcoded test
-      const fallbackTest = createFallbackTest(skillType);
-      setTestContent({
-        id: fallbackTest.id,
-        content: fallbackTest.content,
-        topic: fallbackTest.topic
+      console.warn('Failed to track test history:', error);
+    }
+  };
+
+  const updateTestHistory = async (sessionId: string, userResponses: any, scores: any, feedback: any, timeSpent: number) => {
+    try {
+      const { error: rpcError } = await supabase.rpc('update_test_history', {
+        p_session_id: sessionId,
+        p_user_responses: userResponses,
+        p_scores: scores,
+        p_feedback: feedback,
+        p_time_spent: timeSpent
       });
       
-      toast({
-        title: "Test Ready",
-        description: `Your ${skillType} test is ready (using backup content)!`
-      });
-    } finally {
-      setIsLoading(false);
+      if (rpcError) {
+        console.warn('RPC update_test_history failed:', rpcError);
+      }
+    } catch (error) {
+      console.warn('Failed to update test history:', error);
     }
   };
 
@@ -613,9 +613,44 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
     };
   };
 
-  const handleStartTest = () => {
+  const handleStartTest = async () => {
+    if (!testContent) {
+      toast({
+        title: "No Test Selected",
+        description: "Please select a test first.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Create test session
+    const { data: session, error: sessionError } = await supabase
+      .from('ai_test_sessions')
+      .insert({
+        user_id: user!.id,
+        test_id: testContent.isPreGenerated ? testContent.id : null,
+        skill_type: skillType,
+        started_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (sessionError) {
+      console.error('Failed to create session:', sessionError);
+      toast({
+        title: "Error",
+        description: "Failed to start test session.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setSessionId(session.id);
     setTestStartTime(new Date());
     setShowTest(true);
+
+    // Track in history
+    await insertTestHistory(user!.id, session.id, 'ai', skillType, testContent.content);
   };
 
   const renderTestComponent = () => {
@@ -794,28 +829,31 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         {/* Action Buttons */}
         <div className="flex justify-center space-x-4 pt-6">
           <Button 
-            onClick={generateAITest} 
+            onClick={loadNextTest} 
+            variant="outline" 
+            size="lg" 
+            className="px-8"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Next Test
+          </Button>
+          <Button 
+            onClick={selectRandomTest} 
+            variant="outline" 
+            size="lg" 
+            className="px-8"
+          >
+            <Shuffle className="h-4 w-4 mr-2" />
+            Random Test
+          </Button>
+          <Button 
+            onClick={generateFreshAITest} 
             variant="outline" 
             size="lg" 
             className="px-8"
           >
             <Brain className="h-4 w-4 mr-2" />
-            Generate New AI Test
-          </Button>
-          <Button 
-            onClick={async () => {
-              const loaded = await loadPreGeneratedTest();
-              if (loaded) {
-                setShowResults(false);
-                setShowTest(false);
-              }
-            }} 
-            variant="outline" 
-            size="lg" 
-            className="px-8"
-          >
-            <Database className="h-4 w-4 mr-2" />
-            Load Pre-generated Test
+            Generate New
           </Button>
           <Button onClick={onBack} size="lg" className="px-8">
             Back to Skills
@@ -859,7 +897,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
               </div>
               <div>
                 <CardTitle className="text-2xl">AI-Generated {skillType.charAt(0).toUpperCase() + skillType.slice(1)} Test</CardTitle>
-                <p className="text-white/90">Real IELTS format with comprehensive AI feedback</p>
+                <p className="text-white/90">Smart test selection with consistent content</p>
               </div>
             </div>
             <Badge variant="secondary" className="bg-white/20 text-white border-white/30">
@@ -870,18 +908,26 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         <CardContent className="space-y-6">
           {testContent && (
             <div className="bg-white/10 rounded-lg p-4">
-              <h3 className="font-semibold mb-2">Test Topic: {testContent.topic}</h3>
+              <h3 className="font-semibold mb-2">
+                Current Test: {testContent.topic}
+                {testContent.isPreGenerated && (
+                  <Badge variant="secondary" className="ml-2 bg-green-500/20 text-white">
+                    Pre-generated
+                  </Badge>
+                )}
+              </h3>
               <p className="text-white/90 text-sm">
-                This test follows authentic IELTS format and provides detailed feedback on all assessment criteria.
+                Available tests: {availableTests.length} | 
+                {testContent.isPreGenerated ? ' Using curated content' : ' Freshly generated'}
               </p>
             </div>
           )}
           
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white/10 rounded-lg p-4 text-center">
-              <Brain className="h-8 w-8 mx-auto mb-2" />
-              <div className="font-semibold">AI Generated</div>
-              <div className="text-sm text-white/80">Fresh content every time</div>
+              <Database className="h-8 w-8 mx-auto mb-2" />
+              <div className="font-semibold">Smart Selection</div>
+              <div className="text-sm text-white/80">Consistent test rotation</div>
             </div>
             <div className="bg-white/10 rounded-lg p-4 text-center">
               <Clock className="h-8 w-8 mx-auto mb-2" />
@@ -895,32 +941,45 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
             </div>
           </div>
 
-          {/* Test Type Selection */}
+          {/* Test Selection Options */}
           <div className="bg-white/10 rounded-lg p-4">
-            <h3 className="font-semibold mb-3">Choose Test Type:</h3>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <h3 className="font-semibold mb-3">Choose Test Option:</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <Button 
                 onClick={handleStartTest} 
                 size="lg" 
-                className="bg-white text-gray-900 hover:bg-white/90 px-6 py-3 text-base font-semibold flex-1"
+                className="bg-white text-gray-900 hover:bg-white/90 font-semibold"
                 disabled={!testContent}
               >
-                <Brain className="h-5 w-5 mr-2" />
-                Start AI Test
+                <Database className="h-4 w-4 mr-2" />
+                Start Current
               </Button>
               <Button 
-                onClick={async () => {
-                  const loaded = await loadPreGeneratedTest();
-                  if (loaded && testContent) {
-                    handleStartTest();
-                  }
-                }} 
+                onClick={loadNextTest} 
                 size="lg" 
                 variant="outline"
-                className="border-white/30 text-white hover:bg-white/10 px-6 py-3 text-base font-semibold flex-1"
+                className="border-white/30 text-white hover:bg-white/10 font-semibold"
               >
-                <Database className="h-5 w-5 mr-2" />
-                Load Pre-generated Test
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Next Test
+              </Button>
+              <Button 
+                onClick={selectRandomTest} 
+                size="lg" 
+                variant="outline"
+                className="border-white/30 text-white hover:bg-white/10 font-semibold"
+              >
+                <Shuffle className="h-4 w-4 mr-2" />
+                Random
+              </Button>
+              <Button 
+                onClick={generateFreshAITest} 
+                size="lg" 
+                variant="outline"
+                className="border-white/30 text-white hover:bg-white/10 font-semibold"
+              >
+                <Brain className="h-4 w-4 mr-2" />
+                Generate New
               </Button>
             </div>
           </div>
