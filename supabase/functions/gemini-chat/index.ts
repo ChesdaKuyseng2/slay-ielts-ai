@@ -92,42 +92,46 @@ const generateSkillContent = (skill: string, topic: string) => {
   switch (skill) {
     case 'listening':
       return `Create a comprehensive IELTS Listening test about "${topic}". Generate:
-        - A realistic conversation or monologue transcript (350-450 words) with natural dialogue
-        - 10 varied questions: 4 multiple choice (A,B,C,D), 4 fill-in-the-blank, 2 matching/labeling
-        - Include specific details, names, dates, and numbers in the conversation
+        - A realistic conversation or monologue transcript (400-500 words) with natural, engaging dialogue
+        - Exactly 10 varied questions: 4 multiple choice (A,B,C,D), 4 fill-in-the-blank, 2 matching/labeling
+        - Include specific details, names, dates, numbers, and realistic scenarios in the conversation
         - Questions should test various listening skills: main ideas, specific information, attitudes, and inferences
-        - Provide clear answer key with brief explanations
+        - Provide clear answer key with brief explanations for each answer
+        - Make the content educational and relevant to real-life situations
         Format as valid JSON with 'transcript', 'questions', 'answers', and 'explanations' fields.`;
         
     case 'reading':
       return `Create a comprehensive IELTS Reading passage about "${topic}". Generate:
-        - An academic-style passage (550-650 words) with 5 clear paragraphs (A, B, C, D, E)
-        - Use sophisticated vocabulary and complex sentence structures
-        - 10 questions total: 6 True/False/Not Given, 2 multiple choice, 2 summary completion
-        - Questions should test reading comprehension, inference, and detail recognition
-        - Include challenging distractors and academic language
+        - An academic-style passage (600-700 words) with 5 clear, well-developed paragraphs (A, B, C, D, E)
+        - Use sophisticated vocabulary, complex sentence structures, and academic tone
+        - Exactly 10 questions total: 6 True/False/Not Given, 2 multiple choice, 2 summary completion
+        - Questions should test reading comprehension, inference, detail recognition, and critical thinking
+        - Include challenging distractors and academic language appropriate for IELTS level
+        - Provide detailed explanations for each answer with reference to specific parts of the text
         Format as valid JSON with 'passage', 'questions', 'answers', and 'explanations' fields.`;
         
     case 'writing':
       return `Create comprehensive IELTS Writing tasks about "${topic}". Generate:
-        - Task 1: A data visualization task (chart/graph/table) with clear description requirements
-        - Task 2: An argumentative essay question with balanced perspectives to discuss
+        - Task 1: A data visualization task (chart/graph/table) with clear, specific description requirements
+        - Task 2: An argumentative essay question with balanced perspectives and clear position requirement
         - Include specific word count requirements (150+ for Task 1, 250+ for Task 2)
-        - Provide assessment criteria and band score descriptors
-        - Include sample response excerpts for different band levels
-        Format as valid JSON with 'task1', 'task2', 'criteria', and 'band_descriptors' fields.`;
+        - Provide detailed assessment criteria and band score descriptors for each task
+        - Include sample response excerpts for different band levels (6.0, 7.0, 8.0)
+        - Give specific tips for achieving higher band scores
+        Format as valid JSON with 'task1', 'task2', 'criteria', 'band_descriptors', and 'sample_responses' fields.`;
         
     case 'speaking':
       return `Create a complete IELTS Speaking test about "${topic}". Generate:
-        - Part 1: 4 personal questions about daily life and experiences
-        - Part 2: Detailed cue card with "${topic}" as main focus and 4 specific bullet points
-        - Part 3: 4 abstract discussion questions for deeper analysis and opinion
-        - Include timing guidelines (4-5 min Part 1, 3-4 min Part 2, 4-5 min Part 3)
-        - Provide assessment criteria for fluency, vocabulary, grammar, and pronunciation
-        Format as valid JSON with 'part1', 'part2', 'part3', and 'assessment_criteria' fields.`;
+        - Part 1: 4 personal questions about daily life and experiences related to the topic
+        - Part 2: Detailed cue card with "${topic}" as main focus and 4 specific, engaging bullet points
+        - Part 3: 4 abstract discussion questions for deeper analysis, comparison, and critical thinking
+        - Include precise timing guidelines (4-5 min Part 1, 3-4 min Part 2, 4-5 min Part 3)
+        - Provide comprehensive assessment criteria for fluency, vocabulary, grammar, and pronunciation
+        - Include sample response frameworks and improvement tips for each part
+        Format as valid JSON with 'part1', 'part2', 'part3', 'assessment_criteria', and 'sample_frameworks' fields.`;
         
     default:
-      return `Generate comprehensive IELTS ${skill} test content about "${topic}" with proper structure and assessment criteria.`;
+      return `Generate comprehensive IELTS ${skill} test content about "${topic}" with proper structure, detailed questions, and thorough assessment criteria.`;
   }
 };
 
@@ -142,7 +146,7 @@ serve(async (req) => {
 
     if (!GEMINI_API_KEY) {
       console.error('GEMINI_API_KEY is not configured');
-      throw new Error('GEMINI_API_KEY is not configured');
+      throw new Error('GEMINI_API_KEY is not configured in environment variables');
     }
 
     let prompt = message;
@@ -156,8 +160,8 @@ serve(async (req) => {
     }
 
     const fullPrompt = context 
-      ? `Context: ${context}\n\nUser request: ${prompt}\n\nPlease provide a helpful response for IELTS preparation. If providing feedback, structure it professionally with clear sections for band scores, strengths, areas for improvement, and recommendations. Use professional language without asterisks or markdown formatting.`
-      : `As an expert IELTS preparation assistant, please help with: ${prompt}. If providing feedback, structure it professionally with clear sections for band scores, strengths, areas for improvement, and recommendations. Use professional language without asterisks or markdown formatting.`;
+      ? `Context: ${context}\n\nUser request: ${prompt}\n\nPlease provide a helpful, detailed response for IELTS preparation. If providing feedback, structure it professionally with clear sections for scores, strengths, areas for improvement, and specific recommendations. Use professional language without asterisks or markdown formatting. Ensure all content is educationally valuable and practically applicable.`
+      : `As an expert IELTS preparation assistant and certified examiner, please help with: ${prompt}. If providing feedback, structure it professionally with clear sections for band scores, strengths, areas for improvement, and actionable recommendations. Use professional language without asterisks or markdown formatting. Focus on providing educational value and practical guidance for IELTS success.`;
 
     console.log('Making request to Gemini API...');
 
@@ -173,10 +177,10 @@ serve(async (req) => {
           }]
         }],
         generationConfig: {
-          temperature: 0.8,
+          temperature: 0.7,
           topK: 40,
           topP: 0.95,
-          maxOutputTokens: 3000,
+          maxOutputTokens: 4000,
         },
         safetySettings: [
           {
@@ -220,13 +224,14 @@ serve(async (req) => {
       throw new Error('No text content generated from Gemini API');
     }
 
-    console.log('Successfully generated response');
+    console.log('Successfully generated high-quality response');
 
     return new Response(JSON.stringify({ 
       response: generatedText,
       success: true,
       topic: selectedTopic || undefined,
-      skill: skill || undefined
+      skill: skill || undefined,
+      timestamp: new Date().toISOString()
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -235,20 +240,25 @@ serve(async (req) => {
     console.error('Error in gemini-chat function:', error);
     
     // Provide more specific error messages
-    let errorMessage = 'An unexpected error occurred';
+    let errorMessage = 'An unexpected error occurred while processing your request';
+    let errorDetails = error.message;
+    
     if (error.message.includes('API key')) {
-      errorMessage = 'API key configuration error';
+      errorMessage = 'API key configuration error - please contact support';
     } else if (error.message.includes('network') || error.message.includes('fetch')) {
-      errorMessage = 'Network connection error';
+      errorMessage = 'Network connection error - please try again';
     } else if (error.message.includes('Gemini API')) {
-      errorMessage = error.message;
+      errorMessage = 'AI service temporarily unavailable - please try again shortly';
+    } else if (error.message.includes('rate limit')) {
+      errorMessage = 'Service temporarily busy - please wait a moment and try again';
     }
     
     return new Response(
       JSON.stringify({ 
         error: errorMessage,
         success: false,
-        details: error.message
+        details: errorDetails,
+        timestamp: new Date().toISOString()
       }),
       {
         status: 500,

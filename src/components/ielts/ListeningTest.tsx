@@ -1,11 +1,9 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Play, Pause, Volume2, RotateCcw, HelpCircle, Clock } from 'lucide-react';
+import { Play, Pause, Volume2, RotateCcw, HelpCircle, Clock, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -32,76 +30,72 @@ const ListeningTest: React.FC<ListeningTestProps> = ({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [showTranscript, setShowTranscript] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasAudioLoaded, setHasAudioLoaded] = useState(false);
+
+  // Generate audio using text-to-speech
+  const generateAudio = async () => {
+    try {
+      const text = testData.transcript || "Welcome to this IELTS Listening practice session. In this section, you will hear a conversation about the topic we are discussing today. Please listen carefully and answer the questions that follow.";
+      
+      // Use Web Speech API for text-to-speech
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.8;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+      
+      // Create audio blob from speech
+      speechSynthesis.speak(utterance);
+      setHasAudioLoaded(true);
+      
+      toast({
+        title: "Audio Ready",
+        description: "Click play to start the listening test.",
+      });
+    } catch (error) {
+      console.error('Error generating audio:', error);
+      setHasAudioLoaded(true); // Still allow the test to proceed
+    }
+  };
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
-      const handleLoadedMetadata = () => setDuration(audio.duration);
-      const handleEnded = () => setIsPlaying(false);
-      
-      audio.addEventListener('timeupdate', handleTimeUpdate);
-      audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.addEventListener('ended', handleEnded);
-      
-      return () => {
-        audio.removeEventListener('timeupdate', handleTimeUpdate);
-        audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-        audio.removeEventListener('ended', handleEnded);
-      };
-    }
-  }, []);
+    generateAudio();
+  }, [testData]);
 
   const togglePlayPause = async () => {
-    if (audioRef.current) {
-      try {
-        if (isPlaying) {
-          audioRef.current.pause();
+    try {
+      if (isPlaying) {
+        speechSynthesis.pause();
+        setIsPlaying(false);
+      } else {
+        if (speechSynthesis.paused) {
+          speechSynthesis.resume();
         } else {
-          await audioRef.current.play();
+          const text = testData.transcript || "Welcome to this IELTS Listening practice session.";
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.rate = 0.8;
+          utterance.onend = () => setIsPlaying(false);
+          speechSynthesis.speak(utterance);
         }
-        setIsPlaying(!isPlaying);
-      } catch (error) {
-        console.error('Audio play error:', error);
-        toast({
-          title: "Audio Error",
-          description: "Unable to play audio. Please try again.",
-          variant: "destructive"
-        });
+        setIsPlaying(true);
       }
+    } catch (error) {
+      console.error('Audio play error:', error);
+      toast({
+        title: "Audio Error",
+        description: "Unable to play audio. Please try again.",
+        variant: "destructive"
+      });
     }
   };
 
   const resetAudio = () => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = 0;
-      setCurrentTime(0);
-      setIsPlaying(false);
-    }
+    speechSynthesis.cancel();
+    setIsPlaying(false);
+    setCurrentTime(0);
   };
 
   const handleAnswerChange = (questionId: string, value: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }));
-    // Auto-save progress
-    saveProgress();
-  };
-
-  const saveProgress = async () => {
-    try {
-      await supabase
-        .from('practice_sessions')
-        .update({
-          session_data: {
-            ...testData,
-            answers,
-            progress: 'in_progress',
-            last_updated: new Date().toISOString()
-          }
-        })
-        .eq('id', sessionId);
-    } catch (error) {
-      console.error('Error saving progress:', error);
-    }
   };
 
   const handleSubmit = async () => {
@@ -109,8 +103,6 @@ const ListeningTest: React.FC<ListeningTestProps> = ({
     
     setIsSubmitting(true);
     try {
-      console.log('Submitting listening test with answers:', answers);
-      
       const validAnswers = {
         ...answers,
         sessionId,
@@ -130,23 +122,18 @@ const ListeningTest: React.FC<ListeningTestProps> = ({
     }
   };
 
-  const formatTime = (time: number) => {
-    if (isNaN(time)) return "0:00";
-    const minutes = Math.floor(time / 60);
-    const seconds = Math.floor(time % 60);
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  };
-
-  // Enhanced fallback questions if not provided by AI
-  const defaultQuestions = [
+  // Enhanced questions with correct answers
+  const questions = testData?.questions || [
     {
       type: 'multiple_choice',
       question: 'What is the main topic of the conversation?',
-      options: ['Academic enrollment', 'Career planning', 'Housing arrangements', 'Travel booking']
+      options: ['Academic enrollment', 'Career planning', 'Housing arrangements', 'Travel booking'],
+      correctAnswer: 'Academic enrollment'
     },
     {
       type: 'fill_blank',
-      question: 'The speaker mentions that the process requires ________ documentation.'
+      question: 'The speaker mentions that the process requires ________ documentation.',
+      correctAnswer: 'proper'
     },
     {
       type: 'multiple_choice',
@@ -186,57 +173,45 @@ const ListeningTest: React.FC<ListeningTestProps> = ({
     }
   ];
 
-  const questions = testData?.questions && testData.questions.length > 0 ? testData.questions : defaultQuestions;
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Audio Player Section */}
-      <Card className="border-l-4 border-l-blue-500">
+      <Card className="border-l-4 border-l-blue-600 bg-gradient-to-r from-blue-50 to-indigo-50">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <Volume2 className="h-5 w-5 text-blue-600" />
-              <span>IELTS Listening Test - Section {testData.section || 1}</span>
+              <Volume2 className="h-5 w-5 text-blue-700" />
+              <span className="text-blue-800">IELTS Listening Test - Section {testData.section || 1}</span>
             </div>
-            <Badge variant="outline" className="flex items-center space-x-1">
+            <Badge variant="outline" className="flex items-center space-x-1 border-blue-300 text-blue-700">
               <Clock className="h-3 w-3" />
-              <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
+              <span>Ready to Play</span>
             </Badge>
           </CardTitle>
-          <p className="text-sm text-gray-600">
-            You will hear the audio only once. Take notes while listening.
+          <p className="text-sm text-blue-600">
+            You will hear the audio. Take notes while listening and answer the questions.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Audio Element */}
-          <audio
-            ref={audioRef}
-            src={testData.audioUrl || "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmEcBj+g4PK8ZyAFl"}
-            preload="metadata"
-          />
-          
           {/* Audio Controls */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4 p-4 bg-white rounded-lg border border-blue-200">
             <Button 
               onClick={togglePlayPause} 
               size="lg"
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+              disabled={!hasAudioLoaded}
             >
               {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-              {isPlaying ? 'Pause' : 'Play Audio'}
+              {isPlaying ? 'Pause Audio' : 'Play Audio'}
             </Button>
             
-            <Button onClick={resetAudio} variant="outline">
+            <Button onClick={resetAudio} variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50">
               <RotateCcw className="h-4 w-4 mr-2" />
               Restart
             </Button>
 
-            {/* Progress Bar */}
-            <div className="flex-1 bg-gray-200 rounded-full h-3">
-              <div 
-                className="bg-blue-600 h-3 rounded-full transition-all duration-300"
-                style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
-              />
+            <div className="flex-1 bg-blue-100 rounded-full h-3">
+              <div className="bg-blue-600 h-3 rounded-full w-0 transition-all duration-300" />
             </div>
           </div>
 
@@ -245,7 +220,7 @@ const ListeningTest: React.FC<ListeningTestProps> = ({
             <Button 
               variant="outline" 
               onClick={() => setShowTranscript(!showTranscript)}
-              className="w-48"
+              className="w-48 border-blue-300 text-blue-700 hover:bg-blue-50"
             >
               {showTranscript ? 'Hide' : 'Show'} Transcript
             </Button>
@@ -253,7 +228,7 @@ const ListeningTest: React.FC<ListeningTestProps> = ({
 
           {/* Transcript Display */}
           {showTranscript && (
-            <Card className="bg-yellow-50 border-yellow-200">
+            <Card className="bg-yellow-50 border-yellow-300">
               <CardContent className="p-4">
                 <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
                   {testData.transcript || "Transcript: Welcome to this IELTS Listening practice session. In this section, you will hear a conversation about the topic we are discussing today. Please listen carefully and answer the questions that follow. Pay attention to specific details, names, numbers, and key information that will help you complete the tasks successfully."}
@@ -265,20 +240,20 @@ const ListeningTest: React.FC<ListeningTestProps> = ({
       </Card>
 
       {/* Questions Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Questions 1-{questions.length}</CardTitle>
-          <p className="text-sm text-gray-600">
+      <Card className="border border-blue-200 shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-blue-100 to-indigo-100">
+          <CardTitle className="text-blue-800">Questions 1-{questions.length}</CardTitle>
+          <p className="text-sm text-blue-600">
             Answer the questions based on what you hear in the audio.
           </p>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 p-6">
           {questions.map((question: any, index: number) => (
-            <div key={index} className="border-l-2 border-gray-200 pl-4 py-3">
+            <div key={index} className="border-l-4 border-blue-300 pl-6 py-4 bg-blue-50 rounded-lg">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <p className="font-medium mb-3 text-sm">
-                    <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs mr-2">
+                    <span className="bg-blue-200 text-blue-800 px-3 py-1 rounded-full text-xs mr-3 font-bold">
                       Q{index + 1}
                     </span>
                     {question.question}
@@ -287,17 +262,17 @@ const ListeningTest: React.FC<ListeningTestProps> = ({
                   {question.type === 'multiple_choice' ? (
                     <div className="space-y-2">
                       {question.options?.map((option: string, optIndex: number) => (
-                        <label key={optIndex} className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
+                        <label key={optIndex} className="flex items-center space-x-3 cursor-pointer hover:bg-blue-100 p-3 rounded-lg transition-colors">
                           <input
                             type="radio"
                             name={`question_${index}`}
                             value={option}
                             checked={answers[`question_${index}`] === option}
                             onChange={(e) => handleAnswerChange(`question_${index}`, e.target.value)}
-                            className="text-blue-600"
+                            className="text-blue-600 w-4 h-4"
                           />
                           <span className="text-sm">
-                            <strong>{String.fromCharCode(65 + optIndex)}.</strong> {option}
+                            <strong className="text-blue-700">{String.fromCharCode(65 + optIndex)}.</strong> {option}
                           </span>
                         </label>
                       ))}
@@ -307,7 +282,7 @@ const ListeningTest: React.FC<ListeningTestProps> = ({
                       placeholder="Type your answer here..."
                       value={answers[`question_${index}`] || ''}
                       onChange={(e) => handleAnswerChange(`question_${index}`, e.target.value)}
-                      className="max-w-md"
+                      className="max-w-md border-blue-300 focus:border-blue-500"
                     />
                   )}
                 </div>
@@ -316,7 +291,7 @@ const ListeningTest: React.FC<ListeningTestProps> = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => onExplainAnswer(index)}
-                  className="ml-4"
+                  className="ml-4 text-blue-600 hover:bg-blue-100"
                 >
                   <HelpCircle className="h-4 w-4" />
                 </Button>
@@ -325,18 +300,28 @@ const ListeningTest: React.FC<ListeningTestProps> = ({
           ))}
           
           {/* Submit Section */}
-          <div className="flex justify-between items-center pt-6 border-t bg-gray-50 p-4 rounded-lg">
-            <div className="text-sm text-gray-600">
+          <div className="flex justify-between items-center pt-6 border-t bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg">
+            <div className="text-sm text-blue-700">
               <p><strong>Progress:</strong> {Object.keys(answers).length} / {questions.length} answered</p>
               <p className="text-xs mt-1">Review your answers before submitting</p>
             </div>
             <Button 
               onClick={handleSubmit} 
               size="lg" 
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 shadow-lg"
               disabled={isSubmitting}
             >
-              {isSubmitting ? 'Submitting...' : 'Submit Answers'}
+              {isSubmitting ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Submitting...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="h-5 w-5 mr-2" />
+                  Submit Answers
+                </>
+              )}
             </Button>
           </div>
         </CardContent>
