@@ -1,10 +1,9 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import ProfessionalPracticeSession from './ProfessionalPracticeSession';
-import PracticeSession from './PracticeSession';
+import AITestSession from './ielts/AITestSession';
 import { 
   Headphones, 
   BookOpen, 
@@ -103,7 +102,7 @@ const IeltsAI: React.FC<IeltsAIProps> = ({ onViewChange }) => {
   if (currentSession) {
     if (sessionType === 'ai') {
       return (
-        <PracticeSession 
+        <AITestSession 
           skillType={currentSession} 
           onBack={handleBackToSkills}
         />
@@ -112,7 +111,7 @@ const IeltsAI: React.FC<IeltsAIProps> = ({ onViewChange }) => {
       return (
         <ProfessionalPracticeSession 
           skill={currentSession} 
-          duration={1800} // 30 minutes
+          duration={1800}
           onComplete={handleBackToSkills}
         />
       );
@@ -231,7 +230,7 @@ const IeltsAI: React.FC<IeltsAIProps> = ({ onViewChange }) => {
                 </Button>
                 <Button 
                   variant="outline"
-                  className="w-full border-2 hover:bg-purple-50 text-sm"
+                  className="w-full border-2 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 text-sm border-purple-200"
                   onClick={() => handleStartAI(skill.id)}
                 >
                   <Brain className="h-3 w-3 mr-1" />

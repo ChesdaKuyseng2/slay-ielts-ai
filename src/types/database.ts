@@ -33,6 +33,29 @@ export interface PracticeSession {
   };
 }
 
+export interface AIGeneratedTest {
+  id: string;
+  skill_type: 'listening' | 'reading' | 'writing' | 'speaking';
+  content: any;
+  topic?: string;
+  difficulty_level?: string;
+  created_at: string;
+  is_active: boolean;
+}
+
+export interface AITestSession {
+  id: string;
+  user_id: string;
+  test_id?: string;
+  skill_type: string;
+  user_responses?: any;
+  ai_feedback?: any;
+  band_scores?: any;
+  overall_band_score?: number;
+  completed_at?: string;
+  created_at: string;
+}
+
 export interface ContentItem {
   id: string;
   type: 'practice_set' | 'audio_file' | 'speaking_prompt' | 'sample_answer';

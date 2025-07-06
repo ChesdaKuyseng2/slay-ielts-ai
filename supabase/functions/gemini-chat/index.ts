@@ -20,7 +20,7 @@ interface ChatRequest {
 const TOPICS = {
   listening: [
     "University course enrollment and academic registration process",
-    "Technology company job interview and workplace dynamics",
+    "Technology company job interview and workplace dynamics", 
     "Apartment rental inquiry and housing market discussion",
     "Library services and digital resource management",
     "International travel booking and tourism experiences",
@@ -38,7 +38,7 @@ const TOPICS = {
   reading: [
     "Climate Change Mitigation and Renewable Energy Innovation",
     "Artificial Intelligence Applications in Modern Healthcare",
-    "Smart City Development and Sustainable Urban Planning",
+    "Smart City Development and Sustainable Urban Planning", 
     "Digital Psychology and Social Media's Impact on Behavior",
     "Biodiversity Conservation and Ecosystem Restoration",
     "Future of Work: Remote Employment and Digital Nomadism",
@@ -92,7 +92,7 @@ const generateSkillContent = (skill: string, topic: string) => {
   switch (skill) {
     case 'listening':
       return `Create a comprehensive IELTS Listening test about "${topic}". Generate:
-        - A realistic conversation or monologue transcript (400-500 words) with natural, engaging dialogue
+        - A realistic conversation or monologue transcript (500-600 words) with natural, engaging dialogue
         - Exactly 10 varied questions: 4 multiple choice (A,B,C,D), 4 fill-in-the-blank, 2 matching/labeling
         - Include specific details, names, dates, numbers, and realistic scenarios in the conversation
         - Questions should test various listening skills: main ideas, specific information, attitudes, and inferences
@@ -102,7 +102,7 @@ const generateSkillContent = (skill: string, topic: string) => {
         
     case 'reading':
       return `Create a comprehensive IELTS Reading passage about "${topic}". Generate:
-        - An academic-style passage (600-700 words) with 5 clear, well-developed paragraphs (A, B, C, D, E)
+        - An academic-style passage (700-800 words) with 5 clear, well-developed paragraphs (A, B, C, D, E)
         - Use sophisticated vocabulary, complex sentence structures, and academic tone
         - Exactly 10 questions total: 6 True/False/Not Given, 2 multiple choice, 2 summary completion
         - Questions should test reading comprehension, inference, detail recognition, and critical thinking
@@ -196,7 +196,7 @@ serve(async (req) => {
             threshold: "BLOCK_MEDIUM_AND_ABOVE"
           },
           {
-            category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+            category: "HARM_CATEGORY_DANGEROUS_CONTENT",  
             threshold: "BLOCK_MEDIUM_AND_ABOVE"
           }
         ]

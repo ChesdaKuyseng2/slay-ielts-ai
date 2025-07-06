@@ -33,6 +33,83 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_generated_tests: {
+        Row: {
+          content: Json
+          created_at: string
+          difficulty_level: string | null
+          id: string
+          is_active: boolean | null
+          skill_type: string
+          topic: string | null
+        }
+        Insert: {
+          content: Json
+          created_at?: string
+          difficulty_level?: string | null
+          id?: string
+          is_active?: boolean | null
+          skill_type: string
+          topic?: string | null
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          difficulty_level?: string | null
+          id?: string
+          is_active?: boolean | null
+          skill_type?: string
+          topic?: string | null
+        }
+        Relationships: []
+      }
+      ai_test_sessions: {
+        Row: {
+          ai_feedback: Json | null
+          band_scores: Json | null
+          completed_at: string | null
+          created_at: string
+          id: string
+          overall_band_score: number | null
+          skill_type: string
+          test_id: string | null
+          user_id: string
+          user_responses: Json | null
+        }
+        Insert: {
+          ai_feedback?: Json | null
+          band_scores?: Json | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          overall_band_score?: number | null
+          skill_type: string
+          test_id?: string | null
+          user_id: string
+          user_responses?: Json | null
+        }
+        Update: {
+          ai_feedback?: Json | null
+          band_scores?: Json | null
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          overall_band_score?: number | null
+          skill_type?: string
+          test_id?: string | null
+          user_id?: string
+          user_responses?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_test_sessions_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "ai_generated_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       content_items: {
         Row: {
           content: Json
