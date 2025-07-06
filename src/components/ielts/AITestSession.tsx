@@ -82,7 +82,6 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
 
   const insertTestHistory = async (userId: string, sessionId: string, testType: string, skillType: string, testContent: any) => {
     try {
-      // Try using RPC first
       const { error: rpcError } = await supabase.rpc('insert_test_history', {
         p_user_id: userId,
         p_session_id: sessionId,
@@ -101,7 +100,6 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
 
   const updateTestHistory = async (sessionId: string, userResponses: any, scores: any, feedback: any, timeSpent: number) => {
     try {
-      // Try using RPC first
       const { error: rpcError } = await supabase.rpc('update_test_history', {
         p_session_id: sessionId,
         p_user_responses: userResponses,

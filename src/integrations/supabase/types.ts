@@ -72,7 +72,9 @@ export type Database = {
           id: string
           overall_band_score: number | null
           skill_type: string
+          started_at: string | null
           test_id: string | null
+          time_spent: number | null
           user_id: string
           user_responses: Json | null
         }
@@ -84,7 +86,9 @@ export type Database = {
           id?: string
           overall_band_score?: number | null
           skill_type: string
+          started_at?: string | null
           test_id?: string | null
+          time_spent?: number | null
           user_id: string
           user_responses?: Json | null
         }
@@ -96,7 +100,9 @@ export type Database = {
           id?: string
           overall_band_score?: number | null
           skill_type?: string
+          started_at?: string | null
           test_id?: string | null
+          time_spent?: number | null
           user_id?: string
           user_responses?: Json | null
         }
@@ -239,12 +245,121 @@ export type Database = {
         }
         Relationships: []
       }
+      test_history: {
+        Row: {
+          completed: boolean | null
+          created_at: string
+          feedback: Json | null
+          id: string
+          scores: Json | null
+          session_id: string | null
+          skill_type: string
+          test_content: Json | null
+          test_type: string
+          time_spent: number | null
+          updated_at: string
+          user_id: string
+          user_responses: Json | null
+        }
+        Insert: {
+          completed?: boolean | null
+          created_at?: string
+          feedback?: Json | null
+          id?: string
+          scores?: Json | null
+          session_id?: string | null
+          skill_type: string
+          test_content?: Json | null
+          test_type: string
+          time_spent?: number | null
+          updated_at?: string
+          user_id: string
+          user_responses?: Json | null
+        }
+        Update: {
+          completed?: boolean | null
+          created_at?: string
+          feedback?: Json | null
+          id?: string
+          scores?: Json | null
+          session_id?: string | null
+          skill_type?: string
+          test_content?: Json | null
+          test_type?: string
+          time_spent?: number | null
+          updated_at?: string
+          user_id?: string
+          user_responses?: Json | null
+        }
+        Relationships: []
+      }
+      user_progress: {
+        Row: {
+          average_score: number | null
+          best_score: number | null
+          created_at: string
+          id: string
+          last_test_date: string | null
+          skill_type: string
+          streak_days: number | null
+          total_tests: number | null
+          total_time_spent: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          average_score?: number | null
+          best_score?: number | null
+          created_at?: string
+          id?: string
+          last_test_date?: string | null
+          skill_type: string
+          streak_days?: number | null
+          total_tests?: number | null
+          total_time_spent?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          average_score?: number | null
+          best_score?: number | null
+          created_at?: string
+          id?: string
+          last_test_date?: string | null
+          skill_type?: string
+          streak_days?: number | null
+          total_tests?: number | null
+          total_time_spent?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      insert_test_history: {
+        Args: {
+          p_user_id: string
+          p_session_id: string
+          p_test_type: string
+          p_skill_type: string
+          p_test_content: Json
+        }
+        Returns: undefined
+      }
+      update_test_history: {
+        Args: {
+          p_session_id: string
+          p_user_responses: Json
+          p_scores: Json
+          p_feedback: Json
+          p_time_spent: number
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
