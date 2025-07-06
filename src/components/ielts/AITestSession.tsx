@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { Brain, Clock, Trophy, BookOpen, Headphones, PenTool, Mic, CheckCircle, Star, TrendingUp } from 'lucide-react';
+import { Brain, Clock, Trophy, BookOpen, Headphones, PenTool, Mic, CheckCircle, Star, TrendingUp, RefreshCw, Database } from 'lucide-react';
 import ListeningTest from './ListeningTest';
 import ReadingTest from './ReadingTest';  
 import WritingTest from './WritingTest';
@@ -45,6 +45,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
   const [showResults, setShowResults] = useState(false);
   const [aiFeedback, setAiFeedback] = useState<AIFeedback | null>(null);
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
+  const [usePreGenerated, setUsePreGenerated] = useState(false);
 
   const skillIcons = {
     listening: <Headphones className="h-6 w-6" />,
@@ -60,11 +61,89 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
     speaking: 'from-orange-500 to-orange-600'
   };
 
+  // Get integer band score (rounds to nearest 0.5, then displays as whole number)
+  const getDisplayScore = (score: number): number => {
+    return Math.round(score * 2) / 2;
+  };
+
+  // Get color based on band score
+  const getScoreColor = (score: number): string => {
+    const displayScore = getDisplayScore(score);
+    if (displayScore >= 8.5) return 'text-green-600';
+    if (displayScore >= 7.0) return 'text-blue-600';
+    if (displayScore >= 6.0) return 'text-yellow-600';
+    if (displayScore >= 5.0) return 'text-orange-600';
+    return 'text-red-600';
+  };
+
+  // Get progress bar color
+  const getProgressColor = (score: number): string => {
+    const displayScore = getDisplayScore(score);
+    if (displayScore >= 8.5) return 'from-green-500 to-green-600';
+    if (displayScore >= 7.0) return 'from-blue-500 to-blue-600';
+    if (displayScore >= 6.0) return 'from-yellow-500 to-yellow-600';
+    if (displayScore >= 5.0) return 'from-orange-500 to-orange-600';
+    return 'from-red-500 to-red-600';
+  };
+
   useEffect(() => {
     if (user) {
       generateAITest();
     }
   }, [skillType, user]);
+
+  const loadPreGeneratedTest = async () => {
+    try {
+      console.log(`Loading pre-generated ${skillType} test from database`);
+      
+      const { data: preGeneratedTests, error } = await supabase
+        .from('ai_generated_tests')
+        .select('*')
+        .eq('skill_type', skillType)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        throw error;
+      }
+
+      if (preGeneratedTests && preGeneratedTests.length > 0) {
+        const selectedTest = preGeneratedTests[0];
+        setTestContent({
+          id: selectedTest.id,
+          content: selectedTest.content,
+          topic: selectedTest.topic || `Pre-generated ${skillType} test`
+        });
+
+        // Create test session
+        const { data: session, error: sessionError } = await supabase
+          .from('ai_test_sessions')
+          .insert({
+            user_id: user!.id,
+            test_id: selectedTest.id,
+            skill_type: skillType
+          })
+          .select()
+          .single();
+
+        if (!sessionError) {
+          setSessionId(session.id);
+        }
+
+        toast({
+          title: "Pre-generated Test Loaded",
+          description: `Your ${skillType} test is ready from our database!`
+        });
+        
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error loading pre-generated test:', error);
+      return false;
+    }
+  };
 
   const getBackupTest = async (skill: string) => {
     // Try to get a pre-generated test from database as backup
@@ -232,6 +311,15 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
     try {
       console.log(`Generating AI test for ${skillType}`);
       
+      // If user wants pre-generated content, load from database
+      if (usePreGenerated) {
+        const loaded = await loadPreGeneratedTest();
+        if (loaded) {
+          setIsLoading(false);
+          return;
+        }
+      }
+      
       // First, try to generate fresh content with Gemini API
       let testData;
       let topic = `AI Generated ${skillType} Test`;
@@ -239,7 +327,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
       try {
         const response = await supabase.functions.invoke('gemini-chat', {
           body: {
-            message: `Generate a comprehensive IELTS ${skillType} test`,
+            message: `Generate a comprehensive IELTS ${skillType} test with detailed questions and realistic content`,
             skill: skillType,
             generateContent: true
           }
@@ -308,7 +396,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
       }
       
       toast({
-        title: "AI Test Ready",
+        title: usePreGenerated ? "Pre-generated Test Ready" : "AI Test Ready",
         description: `Your personalized ${skillType} test is ready!`
       });
 
@@ -422,28 +510,34 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
     try {
       // Generate comprehensive AI feedback for IELTS criteria
       const feedbackPrompt = `
-        As an IELTS examiner, analyze this ${skillType} test response and provide detailed feedback following official IELTS criteria:
+        As an expert IELTS examiner, analyze this ${skillType} test response and provide detailed, professional feedback following official IELTS criteria:
         
         Test Content: ${JSON.stringify(testContent.content)}
         User Responses: ${JSON.stringify(responses)}
         
-        Provide detailed analysis for IELTS ${skillType} criteria:
+        Provide comprehensive analysis for IELTS ${skillType} criteria with specific band scores:
         ${skillType === 'writing' ? `
-        - Task Achievement (Task 1) / Task Response (Task 2): 0-9 band
-        - Coherence and Cohesion: 0-9 band  
-        - Lexical Resource: 0-9 band
-        - Grammatical Range and Accuracy: 0-9 band
+        - Task Achievement (Task 1) / Task Response (Task 2): 0-9 band score with detailed explanation
+        - Coherence and Cohesion: 0-9 band score with specific examples from the response
+        - Lexical Resource: 0-9 band score analyzing vocabulary range and accuracy
+        - Grammatical Range and Accuracy: 0-9 band score examining sentence structures and errors
         ` : skillType === 'speaking' ? `
-        - Fluency and Coherence: 0-9 band
-        - Lexical Resource: 0-9 band  
-        - Grammatical Range and Accuracy: 0-9 band
-        - Pronunciation: 0-9 band
+        - Fluency and Coherence: 0-9 band score analyzing flow and organization
+        - Lexical Resource: 0-9 band score examining vocabulary variety and appropriateness
+        - Grammatical Range and Accuracy: 0-9 band score evaluating grammar complexity and accuracy
+        - Pronunciation: 0-9 band score assessing clarity and natural rhythm
         ` : `
-        - Main Ideas: 0-9 band
-        - Supporting Details: 0-9 band
-        - Inference: 0-9 band
-        - Global Understanding: 0-9 band
+        - Main Ideas: 0-9 band score for understanding central concepts
+        - Supporting Details: 0-9 band score for identifying specific information
+        - Inference: 0-9 band score for drawing logical conclusions
+        - Global Understanding: 0-9 band score for overall comprehension
         `}
+        
+        For each criterion, provide:
+        1. Specific examples from the user's response
+        2. Clear explanation of why this band score was awarded
+        3. Detailed suggestions for improvement to reach higher bands
+        4. Recognition of strengths demonstrated
         
         Format as JSON:
         {
@@ -454,14 +548,14 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
             "criterion3": number,
             "criterion4": number
           },
-          "strengths": [3-5 specific positive points],
-          "improvements": [3-5 specific areas to improve],
-          "detailed_feedback": "Professional paragraph explaining performance",
+          "strengths": [5-7 specific positive aspects with examples],
+          "improvements": [5-7 specific areas to improve with actionable advice],
+          "detailed_feedback": "Comprehensive paragraph explaining overall performance with specific references to the response",
           "band_descriptors": {
-            "criterion1": "Specific descriptor for this band level",
-            "criterion2": "Specific descriptor for this band level", 
-            "criterion3": "Specific descriptor for this band level",
-            "criterion4": "Specific descriptor for this band level"
+            "criterion1": "Detailed explanation of performance level with specific examples",
+            "criterion2": "Detailed explanation of performance level with specific examples",
+            "criterion3": "Detailed explanation of performance level with specific examples",
+            "criterion4": "Detailed explanation of performance level with specific examples"
           }
         }
       `;
@@ -472,7 +566,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         const feedbackResponse = await supabase.functions.invoke('gemini-chat', {
           body: {
             message: feedbackPrompt,
-            context: `IELTS ${skillType} test feedback analysis`
+            context: `IELTS ${skillType} test comprehensive feedback analysis with detailed explanations`
           }
         });
 
@@ -482,6 +576,12 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
 
         try {
           feedback = JSON.parse(feedbackResponse.data.response);
+          
+          // Ensure scores are properly formatted
+          feedback.overall_score = getDisplayScore(feedback.overall_score);
+          Object.keys(feedback.category_scores).forEach(key => {
+            feedback.category_scores[key] = getDisplayScore(feedback.category_scores[key]);
+          });
         } catch {
           throw new Error('Failed to parse AI feedback');
         }
@@ -553,30 +653,33 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
 
     const criteria = skillCriteria[skill as keyof typeof skillCriteria];
     const scores = criteria.reduce((acc, criterion) => {
-      acc[criterion.toLowerCase().replace(/ /g, '_')] = 6.5 + Math.random() * 1.5; // Random score between 6.5-8.0
+      acc[criterion.toLowerCase().replace(/ /g, '_')] = getDisplayScore(6.5 + Math.random() * 1.5); // Random score between 6.5-8.0
       return acc;
     }, {} as { [key: string]: number });
 
     const overallScore = Object.values(scores).reduce((sum, score) => sum + score, 0) / Object.values(scores).length;
 
     return {
-      overall_score: Math.round(overallScore * 2) / 2, // Round to nearest 0.5
+      overall_score: getDisplayScore(overallScore),
       category_scores: scores,
       strengths: [
-        "Good understanding of main concepts",
-        "Clear communication of ideas", 
-        "Appropriate use of vocabulary",
-        "Well-structured responses"
+        "Demonstrates good understanding of main concepts and ideas",
+        "Shows clear communication of thoughts and responses", 
+        "Uses appropriate vocabulary for the context and topic",
+        "Maintains well-structured approach to answering questions",
+        "Displays competent handling of the test format and requirements"
       ],
       improvements: [
-        "Work on accuracy in details",
-        "Expand range of vocabulary",
-        "Improve grammatical structures",
-        "Practice time management"
+        "Focus on improving accuracy in identifying specific details",
+        "Expand range of vocabulary to express ideas more precisely",
+        "Work on developing more complex grammatical structures",
+        "Practice time management to ensure complete responses",
+        "Enhance ability to make inferences from given information"
       ],
-      detailed_feedback: `Your performance in this ${skill} test shows solid competency with room for improvement. You demonstrate good understanding of the material and communicate your ideas clearly. Focus on the areas mentioned above to achieve higher band scores.`,
+      detailed_feedback: `Your performance in this ${skill} test demonstrates solid competency with several areas of strength. You show good understanding of the material and communicate your ideas effectively. The response indicates familiarity with the test format and appropriate strategies. To achieve higher band scores, focus on the specific improvement areas mentioned above, particularly enhancing accuracy in details and expanding your linguistic range. Continue practicing with authentic IELTS materials to build confidence and refine your skills further.`,
       band_descriptors: criteria.reduce((acc, criterion) => {
-        acc[criterion.toLowerCase().replace(/ /g, '_')] = "Shows good control with occasional errors";
+        const key = criterion.toLowerCase().replace(/ /g, '_');
+        acc[key] = `Shows good control with generally appropriate usage. Some minor errors occur but do not impede communication. Performance is consistent with Band ${scores[key]} level expectations.`;
         return acc;
       }, {} as { [key: string]: string })
     };
@@ -620,9 +723,14 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
               </div>
             </div>
-            <h3 className="text-xl font-semibold mt-4 mb-2">Generating Your AI Test</h3>
+            <h3 className="text-xl font-semibold mt-4 mb-2">
+              {usePreGenerated ? "Loading Pre-generated Test" : "Generating Your AI Test"}
+            </h3>
             <p className="text-gray-600 text-center max-w-md">
-              Our AI is creating a personalized {skillType} test based on real IELTS exam patterns. This may take a moment...
+              {usePreGenerated 
+                ? `Loading a pre-generated ${skillType} test from our database...`
+                : `Our AI is creating a personalized ${skillType} test based on real IELTS exam patterns. This may take a moment...`
+              }
             </p>
             <div className="flex items-center mt-4 space-x-2">
               <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"></div>
@@ -652,7 +760,9 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-5xl font-bold text-green-700">{aiFeedback.overall_score}</div>
+                <div className={`text-5xl font-bold ${getScoreColor(aiFeedback.overall_score)}`}>
+                  {getDisplayScore(aiFeedback.overall_score)}
+                </div>
                 <div className="text-sm text-green-600 font-medium">Overall Band Score</div>
               </div>
             </div>
@@ -669,30 +779,35 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
           </CardHeader>
           <CardContent className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {Object.entries(aiFeedback.category_scores).map(([category, score]) => (
-                <div key={category} className="bg-white border-2 border-gray-100 rounded-lg p-5 hover:shadow-md transition-shadow">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-gray-800 capitalize text-lg">
-                      {category.replace(/_/g, ' ')}
-                    </h3>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-3xl font-bold text-blue-600">{score}</span>
-                      <span className="text-sm text-gray-500">/9</span>
+              {Object.entries(aiFeedback.category_scores).map(([category, score]) => {
+                const displayScore = getDisplayScore(score);
+                return (
+                  <div key={category} className="bg-white border-2 border-gray-100 rounded-lg p-5 hover:shadow-md transition-shadow">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold text-gray-800 capitalize text-lg">
+                        {category.replace(/_/g, ' ')}
+                      </h3>
+                      <div className="flex items-center space-x-2">
+                        <span className={`text-3xl font-bold ${getScoreColor(score)}`}>
+                          {displayScore}
+                        </span>
+                        <span className="text-sm text-gray-500">/9</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mb-3">
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${(score / 9) * 100}%` }}
-                      ></div>
+                    <div className="mb-3">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className={`bg-gradient-to-r ${getProgressColor(score)} h-2 rounded-full transition-all duration-500`}
+                          style={{ width: `${(displayScore / 9) * 100}%` }}
+                        ></div>
+                      </div>
                     </div>
+                    <p className="text-sm text-gray-600 italic leading-relaxed">
+                      {aiFeedback.band_descriptors[category] || 'Shows competent performance in this area with room for development'}
+                    </p>
                   </div>
-                  <p className="text-sm text-gray-600 italic">
-                    {aiFeedback.band_descriptors[category] || 'Good performance in this area'}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -741,7 +856,7 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
         {/* Professional Feedback Report */}
         <Card className="shadow-lg">
           <CardHeader className="bg-gradient-to-r from-purple-50 to-pink-50">
-            <CardTitle className="text-purple-800">Examiner's Report</CardTitle>
+            <CardTitle className="text-purple-800">Examiner's Detailed Report</CardTitle>
           </CardHeader>
           <CardContent className="p-6">
             <div className="prose max-w-none">
@@ -754,9 +869,29 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
 
         {/* Action Buttons */}
         <div className="flex justify-center space-x-4 pt-6">
-          <Button onClick={() => generateAITest()} variant="outline" size="lg" className="px-8">
+          <Button 
+            onClick={() => {
+              setUsePreGenerated(false);
+              generateAITest();
+            }} 
+            variant="outline" 
+            size="lg" 
+            className="px-8"
+          >
             <Brain className="h-4 w-4 mr-2" />
-            Take Another AI Test
+            Generate New AI Test
+          </Button>
+          <Button 
+            onClick={() => {
+              setUsePreGenerated(true);
+              generateAITest();
+            }} 
+            variant="outline" 
+            size="lg" 
+            className="px-8"
+          >
+            <Database className="h-4 w-4 mr-2" />
+            Load Pre-generated Test
           </Button>
           <Button onClick={onBack} size="lg" className="px-8">
             Back to Skills
@@ -836,16 +971,35 @@ const AITestSession: React.FC<AITestSessionProps> = ({ skillType, onBack }) => {
             </div>
           </div>
 
-          <div className="flex justify-center pt-4">
-            <Button 
-              onClick={handleStartTest} 
-              size="lg" 
-              className="bg-white text-gray-900 hover:bg-white/90 px-8 py-3 text-lg font-semibold"
-              disabled={!testContent}
-            >
-              <Brain className="h-5 w-5 mr-2" />
-              Start AI Test
-            </Button>
+          {/* Test Type Selection */}
+          <div className="bg-white/10 rounded-lg p-4">
+            <h3 className="font-semibold mb-3">Choose Test Type:</h3>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button 
+                onClick={() => {
+                  setUsePreGenerated(false);
+                  handleStartTest();
+                }} 
+                size="lg" 
+                className="bg-white text-gray-900 hover:bg-white/90 px-6 py-3 text-base font-semibold flex-1"
+                disabled={!testContent}
+              >
+                <Brain className="h-5 w-5 mr-2" />
+                Fresh AI Generated Test
+              </Button>
+              <Button 
+                onClick={() => {
+                  setUsePreGenerated(true);
+                  generateAITest();
+                }} 
+                size="lg" 
+                variant="outline"
+                className="border-white/30 text-white hover:bg-white/10 px-6 py-3 text-base font-semibold flex-1"
+              >
+                <Database className="h-5 w-5 mr-2" />
+                Load Pre-generated Test
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
